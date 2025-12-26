@@ -1,0 +1,239 @@
+/* =============================================================================
+   RUNNING DAYS - Design System
+   Bioluminescence-inspired theme with energetic orange/coral accents
+   ============================================================================= */
+
+/* Self-hosted fonts */
+@import "@fontsource-variable/inter";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+
+/* Tailwind CSS 4 */
+@import "tailwindcss";
+
+/* =============================================================================
+   DESIGN TOKENS - OKLCH Color System
+   ============================================================================= */
+
+@layer base {
+  :root {
+    /* Typography */
+    --font-body: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+    /* Spacing */
+    --spacing-1: 0.25rem;
+    --spacing-2: 0.5rem;
+    --spacing-3: 0.75rem;
+    --spacing-4: 1rem;
+    --spacing-6: 1.5rem;
+    --spacing-8: 2rem;
+
+    /* Radius */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.25rem;
+    --radius-3xl: 1.5rem;
+    --radius-full: 9999px;
+
+    /* Transitions */
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 400ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  /* Dark Mode (Default) */
+  :root,
+  .dark {
+    color-scheme: dark;
+
+    /* Neutral Scale - Warm undertone for sophisticated dark UI */
+    --color-neutral-50: oklch(0.98 0.01 60);
+    --color-neutral-100: oklch(0.96 0.01 60);
+    --color-neutral-200: oklch(0.90 0.01 60);
+    --color-neutral-300: oklch(0.80 0.015 60);
+    --color-neutral-400: oklch(0.65 0.015 60);
+    --color-neutral-500: oklch(0.50 0.01 60);
+    --color-neutral-600: oklch(0.40 0.01 60);
+    --color-neutral-700: oklch(0.30 0.01 60);
+    --color-neutral-800: oklch(0.20 0.01 60);
+    --color-neutral-850: oklch(0.15 0.01 60);
+    --color-neutral-900: oklch(0.12 0.01 60);
+    --color-neutral-950: oklch(0.08 0.005 60);
+    --color-neutral-1000: oklch(0.05 0.005 60);
+
+    /* Surface Tokens */
+    --surface-ground: var(--color-neutral-1000);
+    --surface-base: var(--color-neutral-950);
+    --surface-raised: var(--color-neutral-900);
+    --surface-overlay: var(--color-neutral-850);
+    --surface-elevated: var(--color-neutral-800);
+
+    /* Text Tokens */
+    --text-primary: var(--color-neutral-50);
+    --text-secondary: var(--color-neutral-300);
+    --text-muted: var(--color-neutral-400);
+    --text-disabled: var(--color-neutral-500);
+
+    /* Border Tokens */
+    --border-subtle: oklch(0.3 0.01 60 / 0.4);
+    --border-default: oklch(0.4 0.01 60 / 0.5);
+    --border-strong: oklch(0.5 0.01 60 / 0.6);
+
+    /* Running Theme - Energetic Orange/Coral */
+    --hue-primary: 25;
+    --hue-secondary: 15;
+    --hue-tertiary: 35;
+
+    /* Accent Colors */
+    --accent-primary: oklch(0.72 0.2 25);
+    --accent-primary-hover: oklch(0.78 0.22 25);
+    --accent-primary-active: oklch(0.68 0.18 25);
+    --accent-glow: oklch(0.72 0.2 25 / 0.4);
+
+    /* Gradient for primary buttons/highlights */
+    --gradient-accent: linear-gradient(135deg, oklch(0.72 0.22 30) 0%, oklch(0.65 0.2 15) 100%);
+    --gradient-accent-hover: linear-gradient(135deg, oklch(0.78 0.24 30) 0%, oklch(0.70 0.22 15) 100%);
+
+    /* Status Colors */
+    --color-success: oklch(0.72 0.2 145);
+    --color-success-muted: oklch(0.45 0.12 145 / 0.3);
+    --color-warning: oklch(0.82 0.18 85);
+    --color-warning-muted: oklch(0.5 0.12 85 / 0.3);
+    --color-error: oklch(0.65 0.25 25);
+    --color-error-muted: oklch(0.45 0.15 25 / 0.3);
+
+    /* Focus Ring */
+    --focus-ring: 0 0 0 3px oklch(0.72 0.2 25 / 0.35);
+
+    /* shadcn/ui compatibility */
+    --background: var(--surface-ground);
+    --foreground: var(--text-primary);
+    --card: var(--surface-raised);
+    --card-foreground: var(--text-primary);
+    --primary: var(--accent-primary);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: var(--surface-raised);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--surface-base);
+    --muted-foreground: var(--text-muted);
+    --accent: var(--accent-primary);
+    --accent-foreground: oklch(1 0 0);
+    --destructive: var(--color-error);
+    --border: var(--border-default);
+    --input: var(--surface-raised);
+    --ring: var(--accent-primary);
+    --radius: var(--radius-lg);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--surface-ground);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* =============================================================================
+   COMPONENT STYLES
+   ============================================================================= */
+
+@layer components {
+  /* Glass Card Effect */
+  .glass-card {
+    background: oklch(from var(--surface-raised) l c h / 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-2xl);
+  }
+
+  /* Progress Ring */
+  .progress-ring {
+    transform: rotate(-90deg);
+  }
+
+  .progress-ring-circle {
+    transition: stroke-dashoffset var(--duration-slow) var(--ease-out);
+    stroke-linecap: round;
+  }
+
+  /* Stat Card */
+  .stat-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-4) var(--spacing-6);
+    transition: border-color var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out);
+  }
+
+  .stat-card:hover {
+    border-color: oklch(from var(--accent-primary) l c h / 0.3);
+    transform: translateY(-2px);
+  }
+
+  /* Glow Effect */
+  .glow-accent {
+    box-shadow: 0 0 20px oklch(from var(--accent-primary) l c h / 0.3),
+                0 0 40px oklch(from var(--accent-primary) l c h / 0.15);
+  }
+
+  /* Number Display */
+  .number-display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* =============================================================================
+   UTILITIES
+   ============================================================================= */
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  /* Custom scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-neutral-700) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-neutral-700);
+    border-radius: var(--radius-full);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--color-neutral-600);
+  }
+}
