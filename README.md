@@ -1,5 +1,9 @@
 # Running Days
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Running Days Dashboard" width="400">
+</p>
+
 Track your running goal of 300 unique running days per calendar year. Integrates with Apple Health via [Health Auto Export](https://www.healthexportapp.com/) to automatically sync your workouts.
 
 ## Features
