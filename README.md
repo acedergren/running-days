@@ -1,145 +1,108 @@
 # Running Days
 
 <p align="center">
-  <img src="docs/desktop-dashboard.png" alt="Running Days Desktop Dashboard" width="700">
+  <img src="docs/dashboard-realistic-desktop.png" alt="Running Days Dashboard" width="700">
 </p>
 
 <p align="center">
-  <em>Beautiful dark-themed dashboard with real-time goal tracking</em>
+  <strong>221 days. 1,756 km. One year of consistent running.</strong>
 </p>
 
-Track your running goal of 300 unique running days per calendar year. Integrates with Apple Health via [Health Auto Export](https://www.healthexportapp.com/) to automatically sync your workouts.
+## Why Days, Not Streaks?
+
+**Streaks are fragile. Consistency is sustainable.**
+
+Most fitness apps celebrate streaks—run every single day or watch your progress reset to zero. Miss one day due to illness, travel, or life? Your 47-day streak becomes worthless.
+
+**Running Days takes a different approach**: track the *total number of days* you run each year, aiming for a realistic goal like 300 days.
+
+### The Math of Consistency
+
+| Approach | Days Off Allowed | Reality |
+|----------|------------------|---------|
+| Daily Streak | 0 days/year | Unsustainable, leads to injury |
+| 300 Days Goal | 65 days/year | ~5 days/week, room for rest & life |
+
+With a 300-day goal, you can:
+- Take a full week off when sick
+- Skip runs during travel
+- Rest when your body needs it
+- Still achieve an impressive 82% running rate
+
+<p align="center">
+  <img src="docs/dashboard-realistic-mobile.png" alt="Running Days Mobile View" width="300">
+</p>
+
+<p align="center">
+  <em>Track your year-long journey, not just your current streak</em>
+</p>
 
 ## Features
 
-- **Goal Tracking**: Visual progress toward 300 running days per year
-- **Automatic Sync**: Webhook integration with Health Auto Export iOS app
-- **Statistics**: Total distance, time, pace trends, and more
-- **PWA Support**: Add to home screen for app-like experience
-- **Dark Theme**: Beautiful bioluminescence-inspired dark UI
+- **Year-Long Progress**: See your running days accumulate throughout the year
+- **On-Track Indicator**: Know if you're ahead or behind your goal pace
+- **Automatic Sync**: Connects to Apple Health via Health Auto Export
+- **Lifetime Stats**: Total distance, time, and average pace
+- **PWA Support**: Install on your phone for quick access
+- **Beautiful Dark UI**: Easy on the eyes during early morning runs
 
-### Mobile-First Design
+## How It Works
 
-<p align="center">
-  <img src="docs/mobile-dashboard.png" alt="Running Days Mobile View" width="300">
-</p>
+1. **Set your goal** (default: 300 running days per year)
+2. **Run when you can** - morning, evening, 5K or marathon
+3. **Watch your days add up** - every run counts as one day
+4. **Stay on pace** - the app shows if you're ahead or behind
 
-<p align="center">
-  <em>Fully responsive - works great on phones</em>
-</p>
+Multiple runs in one day? Still counts as 1 day. The focus is on *showing up consistently*, not logging maximum volume.
 
 ## Tech Stack
 
-- **Framework**: SvelteKit 2 with Svelte 5
+- **Framework**: SvelteKit 2 with Svelte 5 (runes)
 - **Styling**: Tailwind CSS 4 with OKLCH color system
 - **Database**: SQLite with Drizzle ORM
-- **Charts**: LayerChart (Svelte-native D3 wrapper)
-- **UI Components**: bits-ui + custom components
-- **Icons**: lucide-svelte
+- **Charts**: LayerChart for data visualization
+- **UI**: bits-ui + lucide-svelte icons
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 22+
-- pnpm (recommended) or npm
-
-### Installation
+## Quick Start
 
 ```bash
-# Clone the repository
+# Clone and install
 git clone https://github.com/acedergren/running-days.git
 cd running-days
+npm install
 
-# Install dependencies
-pnpm install
+# Set up database
+npm run db:generate
+npm run db:migrate
 
-# Generate database migrations
-pnpm db:generate
-
-# Run database migrations
-pnpm db:migrate
-
-# Start development server
-pnpm dev
+# Start dev server
+npm run dev
 ```
 
-### Setting Up Health Auto Export
+## Connecting Apple Health
 
-1. Install [Health Auto Export](https://apps.apple.com/app/health-auto-export/id1115567069) on your iPhone
-2. Create a webhook token in the app's settings or database
-3. Configure the webhook URL in Health Auto Export:
-   ```
-   https://your-domain.com/api/webhook?token=YOUR_TOKEN
-   ```
-4. Select "Running" workouts to export
-5. Enable automatic sync
+This app syncs with [Health Auto Export](https://www.healthexportapp.com/) for automatic workout imports:
 
-## Project Structure
+1. Install Health Auto Export on your iPhone
+2. Create a webhook token in your Running Days database
+3. Configure the webhook URL: `https://your-domain.com/api/webhook?token=YOUR_TOKEN`
+4. Select "Running" workouts and enable auto-sync
 
-```
-src/
-├── lib/
-│   ├── components/
-│   │   ├── charts/       # LayerChart visualizations
-│   │   └── ui/           # Reusable UI components
-│   ├── server/
-│   │   └── db/           # Drizzle schema and database
-│   └── utils.ts          # Utility functions
-├── routes/
-│   ├── api/
-│   │   └── webhook/      # Health Auto Export webhook
-│   ├── +layout.svelte
-│   ├── +page.server.ts   # Server-side data loading
-│   └── +page.svelte      # Dashboard
-└── app.css               # Global styles and design tokens
-```
-
-## API
-
-### Webhook Endpoint
-
-`POST /api/webhook?token=YOUR_TOKEN`
-
-Accepts workout data from Health Auto Export. Automatically filters for running workouts and updates daily statistics.
-
-### Query Parameters
-
-- `token` (required): Your webhook authentication token
-
-## Deployment
-
-### Docker
+## Development
 
 ```bash
-docker build -t running-days .
-docker run -p 3000:3000 -v ./data:/data running-days
+npm run dev          # Start dev server
+npm test             # Run tests (42 passing)
+npm run check        # TypeScript check
+npm run db:studio    # Open Drizzle Studio
 ```
-
-### Self-hosted
-
-```bash
-pnpm build
-node build/index.js
-```
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NODE_ENV` | Environment mode | `development` |
-| `PORT` | Server port | `3000` |
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+GNU Affero General Public License v3.0 - see [LICENSE](LICENSE)
 
-## Contributing
+---
 
-Contributions are welcome! Please read the contributing guidelines before submitting a PR.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+<p align="center">
+  <em>Built for runners who want sustainable consistency, not unsustainable perfection.</em>
+</p>
