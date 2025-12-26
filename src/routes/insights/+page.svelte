@@ -6,9 +6,14 @@
 
 	let { data } = $props();
 
+	// Chart data types
+	type MonthlyDataPoint = { month: string; distance: number; days: number; pace: number | null };
+	type WeeklyDataPoint = { week: string; distance: number; days: number };
+	type PaceDataPoint = { date: Date; pace: number };
+
 	// Transform monthly data for charts
 	const monthlyChartData = $derived(
-		data.monthlyData.map((d) => ({
+		data.monthlyData.map((d): MonthlyDataPoint => ({
 			month: new Date(d.month + '-01').toLocaleDateString('en-US', { month: 'short' }),
 			distance: (d.totalDistance ?? 0) / 1000,
 			days: d.runningDays ?? 0,
@@ -18,7 +23,7 @@
 
 	// Transform weekly data for trend chart
 	const weeklyChartData = $derived(
-		data.weeklyData.map((d, i) => ({
+		data.weeklyData.map((d, i): WeeklyDataPoint => ({
 			week: `W${i + 1}`,
 			distance: (d.totalDistance ?? 0) / 1000,
 			days: d.runningDays ?? 0
@@ -30,7 +35,7 @@
 		data.yearlyData
 			.filter((d) => d.pace && d.pace > 0)
 			.slice(-30)
-			.map((d) => ({
+			.map((d): PaceDataPoint => ({
 				date: new Date(d.date),
 				pace: (d.pace as number) / 60
 			}))
@@ -168,7 +173,7 @@
 								</defs>
 								<Highlight area />
 							</Svg>
-							<Tooltip.Root header={(d) => d.month} let:data>
+							<Tooltip.Root header={(d: MonthlyDataPoint) => d.month} let:data>
 								<Tooltip.Item
 									label="Distance"
 									value={`${data.distance.toFixed(1)} km`}
@@ -243,7 +248,7 @@
 								</defs>
 								<Highlight area />
 							</Svg>
-							<Tooltip.Root header={(d) => d.month} let:data>
+							<Tooltip.Root header={(d: MonthlyDataPoint) => d.month} let:data>
 								<Tooltip.Item
 									label="Running Days"
 									value={`${data.days} days`}
@@ -308,7 +313,7 @@
 								<Spline class="stroke-2 stroke-[var(--accent-primary)]" />
 								<Highlight points lines />
 							</Svg>
-							<Tooltip.Root header={(d) => d.date.toLocaleDateString()} let:data>
+							<Tooltip.Root header={(d: PaceDataPoint) => d.date.toLocaleDateString()} let:data>
 								<Tooltip.Item
 									label="Pace"
 									value={`${Math.floor(data.pace)}:${String(Math.round((data.pace % 1) * 60)).padStart(2, '0')} /km`}
@@ -379,7 +384,7 @@
 								</defs>
 								<Highlight area />
 							</Svg>
-							<Tooltip.Root header={(d) => d.week} let:data>
+							<Tooltip.Root header={(d: WeeklyDataPoint) => d.week} let:data>
 								<Tooltip.Item
 									label="Distance"
 									value={`${data.distance.toFixed(1)} km`}
