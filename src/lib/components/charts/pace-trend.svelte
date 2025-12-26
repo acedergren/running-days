@@ -1,7 +1,13 @@
 <script lang="ts">
-	import { Chart, Svg, Axis, Spline, Area, Highlight, Tooltip, TooltipItem } from 'layerchart';
+	import { Chart, Svg, Axis, Spline, Area, Highlight, Tooltip } from 'layerchart';
 	import { scaleTime, scaleLinear } from 'd3-scale';
 	import { formatPace } from '$lib/utils';
+
+	type ChartDataPoint = {
+		date: Date;
+		pace: number;
+		paceMin: number;
+	};
 
 	interface DataPoint {
 		date: string;
@@ -78,13 +84,13 @@
 				<Spline class="stroke-2 stroke-[var(--accent-primary)]" />
 				<Highlight points lines />
 			</Svg>
-			<Tooltip header={(d) => d.date.toLocaleDateString()} let:data>
-				<TooltipItem
+			<Tooltip.Root header={(d: ChartDataPoint) => d.date.toLocaleDateString()} let:data>
+				<Tooltip.Item
 					label="Pace"
 					value={formatPace(1000 / (data.paceMin * 60))}
 					valueAlign="right"
 				/>
-			</Tooltip>
+			</Tooltip.Root>
 		</Chart>
 	</div>
 {:else}

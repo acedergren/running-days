@@ -1,7 +1,13 @@
 <script lang="ts">
-	import { Chart, Svg, Axis, Bar, Highlight, Tooltip, TooltipItem } from 'layerchart';
+	import { Chart, Svg, Axis, Bars, Highlight, Tooltip } from 'layerchart';
 	import { scaleBand, scaleLinear } from 'd3-scale';
 	import { formatDistance } from '$lib/utils';
+
+	type ChartDataPoint = {
+		date: string;
+		dateLabel: string;
+		distanceKm: number;
+	};
 
 	interface DataPoint {
 		date: string;
@@ -62,20 +68,20 @@
 						textAnchor: 'end'
 					}}
 				/>
-				<Bar
+				<Bars
 					radius={4}
-					class="fill-[var(--accent-primary)]"
+					fill="var(--accent-primary)"
 					strokeWidth={0}
 				/>
 				<Highlight area />
 			</Svg>
-			<Tooltip header={(d) => d.dateLabel} let:data>
-				<TooltipItem
+			<Tooltip.Root header={(d: ChartDataPoint) => d.dateLabel} let:data>
+				<Tooltip.Item
 					label="Distance"
 					value={`${formatDistance(data.distanceKm * 1000)} km`}
 					valueAlign="right"
 				/>
-			</Tooltip>
+			</Tooltip.Root>
 		</Chart>
 	</div>
 {:else}
