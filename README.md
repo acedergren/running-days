@@ -1,7 +1,11 @@
 # Running Days
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Running Days Dashboard" width="400">
+  <img src="docs/desktop-dashboard.png" alt="Running Days Desktop Dashboard" width="700">
+</p>
+
+<p align="center">
+  <em>Beautiful dark-themed dashboard with real-time goal tracking</em>
 </p>
 
 Track your running goal of 300 unique running days per calendar year. Integrates with Apple Health via [Health Auto Export](https://www.healthexportapp.com/) to automatically sync your workouts.
@@ -13,6 +17,16 @@ Track your running goal of 300 unique running days per calendar year. Integrates
 - **Statistics**: Total distance, time, pace trends, and more
 - **PWA Support**: Add to home screen for app-like experience
 - **Dark Theme**: Beautiful bioluminescence-inspired dark UI
+
+### Mobile-First Design
+
+<p align="center">
+  <img src="docs/mobile-dashboard.png" alt="Running Days Mobile View" width="300">
+</p>
+
+<p align="center">
+  <em>Fully responsive - works great on phones</em>
+</p>
 
 ## Tech Stack
 
