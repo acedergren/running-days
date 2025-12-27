@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core';
 
 /**
  * Running workouts imported from Apple Health
@@ -21,7 +21,9 @@ export const workouts = sqliteTable('workouts', {
 	rawPayload: text('raw_payload'), // Store original JSON for debugging
 	createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 	updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
-});
+}, (table) => [
+	index('workouts_date_idx').on(table.date)
+]);
 
 /**
  * Yearly goals configuration
@@ -49,7 +51,9 @@ export const dailyStats = sqliteTable('daily_stats', {
 	fastestPaceSecondsPerKm: real('fastest_pace_seconds_per_km'),
 	createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 	updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
-});
+}, (table) => [
+	index('daily_stats_year_idx').on(table.year)
+]);
 
 /**
  * Webhook configuration and auth tokens

@@ -11,8 +11,11 @@ import { dirname } from 'path';
 
 try {
 	mkdirSync(dirname(DB_PATH), { recursive: true });
-} catch {
-	// Directory already exists
+} catch (err: unknown) {
+	// Only ignore "already exists" errors, rethrow permission errors etc.
+	if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+		throw err;
+	}
 }
 
 const sqlite = new Database(DB_PATH);

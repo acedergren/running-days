@@ -6,9 +6,9 @@
 
 	let { data } = $props();
 
-	// Calculate year progress
+	// Calculate year progress (check if Feb 29 exists to detect leap year)
 	const daysInYear = $derived(
-		new Date(data.goal.year, 11, 31).getDate() === 31 ? 365 : 366
+		new Date(data.goal.year, 1, 29).getDate() === 29 ? 366 : 365
 	);
 	const dayOfYear = $derived(
 		Math.floor(

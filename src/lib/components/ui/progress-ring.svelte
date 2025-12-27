@@ -29,9 +29,10 @@
 	const offset = $derived(circumference - (progress / 100) * circumference);
 	const center = $derived(size / 2);
 
-	// Generate unique gradient ID for this instance
-	const gradientId = $derived(`ring-gradient-${Math.random().toString(36).slice(2, 9)}`);
-	const glowId = $derived(`ring-glow-${Math.random().toString(36).slice(2, 9)}`);
+	// Generate stable unique IDs for this instance (computed once on mount, not on every update)
+	const instanceId = Math.random().toString(36).slice(2, 9);
+	const gradientId = `ring-gradient-${instanceId}`;
+	const glowId = `ring-glow-${instanceId}`;
 </script>
 
 <div class={cn('relative inline-flex items-center justify-center', className)}>

@@ -1,6 +1,13 @@
 import { json, error } from '@sveltejs/kit';
 import { db, workouts, dailyStats, webhookTokens } from '$lib/server/db';
 import { eq, and } from 'drizzle-orm';
+import {
+	filterRunningWorkouts,
+	processWorkout,
+	mergeDailyStats,
+	type HealthExportWorkout,
+	type DailyStatsUpdate
+} from '$lib/workout-processor';
 import type { RequestHandler } from './$types';
 
 /**
@@ -9,18 +16,6 @@ import type { RequestHandler } from './$types';
  * Receives workout data from the Health Auto Export iOS app
  * Docs: https://www.healthexportapp.com/
  */
-
-interface HealthExportWorkout {
-	id?: string;
-	name: string;
-	start: string; // ISO datetime
-	end: string;
-	duration: number; // seconds
-	distance?: number; // meters
-	activeEnergy?: number; // kcal
-	avgHeartRate?: number;
-	maxHeartRate?: number;
-}
 
 interface HealthExportPayload {
 	data: {
@@ -64,11 +59,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 	const incomingWorkouts = payload.data?.workouts ?? [];
 
-	// Filter to only running workouts
-	const runningWorkouts = incomingWorkouts.filter(
-		(w) => w.name.toLowerCase().includes('running') ||
-		       w.name.toLowerCase().includes('run')
-	);
+	// Use shared filter function from workout-processor
+	const runningWorkouts = filterRunningWorkouts(incomingWorkouts);
 
 	if (runningWorkouts.length === 0) {
 		return json({
@@ -82,14 +74,19 @@ export const POST: RequestHandler = async ({ request, url }) => {
 	let skipped = 0;
 
 	for (const workout of runningWorkouts) {
-		const workoutId = workout.id ?? `${workout.start}-${workout.duration}`;
+		// Validate date before processing
 		const startDate = new Date(workout.start);
-		const dateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
-		const year = startDate.getFullYear();
+		if (isNaN(startDate.getTime())) {
+			skipped++;
+			continue;
+		}
+
+		// Use shared processor to transform workout
+		const processedWorkout = processWorkout(workout);
 
 		// Check if workout already exists
 		const existing = await db.query.workouts.findFirst({
-			where: eq(workouts.id, workoutId)
+			where: eq(workouts.id, processedWorkout.id)
 		});
 
 		if (existing) {
@@ -97,71 +94,65 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			continue;
 		}
 
-		// Calculate pace if we have distance
-		const avgPaceSecondsPerKm = workout.distance && workout.distance > 0
-			? (workout.duration / (workout.distance / 1000))
-			: null;
-
 		// Insert workout
 		await db.insert(workouts).values({
-			id: workoutId,
-			date: dateStr,
-			startTime: workout.start,
-			endTime: workout.end,
-			durationSeconds: Math.round(workout.duration),
-			distanceMeters: workout.distance ?? 0,
-			energyBurnedKcal: workout.activeEnergy,
-			avgHeartRate: workout.avgHeartRate,
-			maxHeartRate: workout.maxHeartRate,
-			avgPaceSecondsPerKm,
+			id: processedWorkout.id,
+			date: processedWorkout.date,
+			startTime: processedWorkout.startTime,
+			endTime: processedWorkout.endTime,
+			durationSeconds: processedWorkout.durationSeconds,
+			distanceMeters: processedWorkout.distanceMeters,
+			energyBurnedKcal: processedWorkout.energyBurnedKcal,
+			avgHeartRate: processedWorkout.avgHeartRate,
+			maxHeartRate: processedWorkout.maxHeartRate,
+			avgPaceSecondsPerKm: processedWorkout.avgPaceSecondsPerKm,
 			source: 'health_auto_export',
-			rawPayload: JSON.stringify(workout)
+			rawPayload: processedWorkout.rawPayload
 		});
 
 		// Update or create daily stats
 		const existingDay = await db.query.dailyStats.findFirst({
-			where: eq(dailyStats.date, dateStr)
+			where: eq(dailyStats.date, processedWorkout.date)
 		});
 
 		if (existingDay) {
-			// Update existing day's stats
-			const newTotalDistance = existingDay.totalDistanceMeters + (workout.distance ?? 0);
-			const newTotalDuration = existingDay.totalDurationSeconds + workout.duration;
-			const newAvgPace = newTotalDistance > 0
-				? newTotalDuration / (newTotalDistance / 1000)
-				: null;
+			// Use shared merge function
+			const existingStats: DailyStatsUpdate = {
+				date: existingDay.date,
+				year: existingDay.year,
+				runCount: existingDay.runCount,
+				totalDistanceMeters: existingDay.totalDistanceMeters,
+				totalDurationSeconds: existingDay.totalDurationSeconds,
+				avgPaceSecondsPerKm: existingDay.avgPaceSecondsPerKm,
+				longestRunMeters: existingDay.longestRunMeters ?? 0,
+				fastestPaceSecondsPerKm: existingDay.fastestPaceSecondsPerKm
+			};
+
+			const mergedStats = mergeDailyStats(existingStats, processedWorkout);
 
 			await db
 				.update(dailyStats)
 				.set({
-					runCount: existingDay.runCount + 1,
-					totalDistanceMeters: newTotalDistance,
-					totalDurationSeconds: newTotalDuration,
-					avgPaceSecondsPerKm: newAvgPace,
-					longestRunMeters: Math.max(
-						existingDay.longestRunMeters ?? 0,
-						workout.distance ?? 0
-					),
-					fastestPaceSecondsPerKm: avgPaceSecondsPerKm
-						? Math.min(
-								existingDay.fastestPaceSecondsPerKm ?? Infinity,
-								avgPaceSecondsPerKm
-							)
-						: existingDay.fastestPaceSecondsPerKm,
+					runCount: mergedStats.runCount,
+					totalDistanceMeters: mergedStats.totalDistanceMeters,
+					totalDurationSeconds: mergedStats.totalDurationSeconds,
+					avgPaceSecondsPerKm: mergedStats.avgPaceSecondsPerKm,
+					longestRunMeters: mergedStats.longestRunMeters,
+					fastestPaceSecondsPerKm: mergedStats.fastestPaceSecondsPerKm,
 					updatedAt: new Date().toISOString()
 				})
-				.where(eq(dailyStats.date, dateStr));
+				.where(eq(dailyStats.date, processedWorkout.date));
 		} else {
 			// Create new day entry
 			await db.insert(dailyStats).values({
-				date: dateStr,
-				year,
+				date: processedWorkout.date,
+				year: processedWorkout.year,
 				runCount: 1,
-				totalDistanceMeters: workout.distance ?? 0,
-				totalDurationSeconds: Math.round(workout.duration),
-				avgPaceSecondsPerKm,
-				longestRunMeters: workout.distance ?? 0,
-				fastestPaceSecondsPerKm: avgPaceSecondsPerKm
+				totalDistanceMeters: processedWorkout.distanceMeters,
+				totalDurationSeconds: processedWorkout.durationSeconds,
+				avgPaceSecondsPerKm: processedWorkout.avgPaceSecondsPerKm,
+				longestRunMeters: processedWorkout.distanceMeters,
+				fastestPaceSecondsPerKm: processedWorkout.avgPaceSecondsPerKm
 			});
 		}
 
