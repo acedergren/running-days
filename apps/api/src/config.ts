@@ -23,6 +23,13 @@ export interface Config {
   // Rate limiting
   rateLimitMax: number;
   rateLimitWindow: string;
+
+  // Apple Sign-In OAuth
+  appleClientId: string;
+  appleTeamId: string;
+  appleKeyId: string;
+  applePrivateKey: string;
+  appleRedirectUri: string;
 }
 
 function getEnvOrThrow(key: string): string {
@@ -65,7 +72,24 @@ export function loadConfig(): Config {
 
     // Rate limiting
     rateLimitMax: parseInt(getEnvOrDefault('RATE_LIMIT_MAX', '100'), 10),
-    rateLimitWindow: getEnvOrDefault('RATE_LIMIT_WINDOW', '1 minute')
+    rateLimitWindow: getEnvOrDefault('RATE_LIMIT_WINDOW', '1 minute'),
+
+    // Apple Sign-In OAuth - required in production
+    appleClientId: isDev
+      ? getEnvOrDefault('APPLE_CLIENT_ID', '')
+      : getEnvOrThrow('APPLE_CLIENT_ID'),
+    appleTeamId: isDev
+      ? getEnvOrDefault('APPLE_TEAM_ID', '')
+      : getEnvOrThrow('APPLE_TEAM_ID'),
+    appleKeyId: isDev
+      ? getEnvOrDefault('APPLE_KEY_ID', '')
+      : getEnvOrThrow('APPLE_KEY_ID'),
+    applePrivateKey: isDev
+      ? getEnvOrDefault('APPLE_PRIVATE_KEY', '')
+      : getEnvOrThrow('APPLE_PRIVATE_KEY'),
+    appleRedirectUri: isDev
+      ? getEnvOrDefault('APPLE_REDIRECT_URI', 'http://localhost:5173/auth/apple/callback')
+      : getEnvOrThrow('APPLE_REDIRECT_URI')
   };
 }
 

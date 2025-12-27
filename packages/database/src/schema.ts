@@ -69,18 +69,25 @@ export const webhookTokens = sqliteTable('webhook_tokens', {
 
 /**
  * User accounts for authentication
+ * Supports both password and OAuth (Apple Sign-In) authentication
  */
 export const users = sqliteTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  email: text('email').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
+  email: text('email').unique(), // Nullable for OAuth users with private relay
+  passwordHash: text('password_hash'), // Nullable for OAuth users
+  // OAuth fields
+  appleUserId: text('apple_user_id').unique(), // Apple's stable 'sub' claim
+  authProvider: text('auth_provider', { enum: ['password', 'apple'] }).notNull().default('password'),
+  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
+  // Common fields
   role: text('role', { enum: ['user', 'admin'] }).notNull().default('user'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   lastLoginAt: text('last_login_at'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 }, (table) => [
-  index('users_email_idx').on(table.email)
+  index('users_email_idx').on(table.email),
+  index('users_apple_user_id_idx').on(table.appleUserId)
 ]);
 
 /**

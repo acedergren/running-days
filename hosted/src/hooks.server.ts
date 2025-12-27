@@ -13,7 +13,8 @@ import { initDatabase } from '$lib/server/db/index.js';
 import {
 	validateSession,
 	getSessionCookie,
-	extendSession
+	extendSession,
+	shouldExtendSession
 } from '$lib/server/auth/session.js';
 
 // Initialize database on first request
@@ -37,11 +38,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 			event.locals.userId = userId;
 			event.locals.sessionId = sessionId;
 
-			// Extend session in background - failure here is non-critical
-			// Session is already validated, extension is optimization only
-			extendSession(sessionId).catch((err) => {
-				console.error('Session extension failed:', err);
-			});
+			// Check if session should be extended (hybrid timeout policy)
+			// Only extend if more than half the session duration has passed
+			shouldExtendSession(sessionId)
+				.then((shouldExtend) => {
+					if (shouldExtend) {
+						return extendSession(sessionId);
+					}
+				})
+				.catch((err) => {
+					// Extension failure is non-critical - session still valid
+					console.error('Session extension failed:', err);
+				});
 		}
 	}
 

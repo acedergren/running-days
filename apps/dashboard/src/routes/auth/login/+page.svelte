@@ -1,12 +1,16 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { Activity, Mail, Lock, AlertCircle, Loader2 } from 'lucide-svelte';
+	import { Activity, AlertCircle, Loader2 } from 'lucide-svelte';
 	import Button from '$lib/components/ui/button.svelte';
-	import type { ActionData } from './$types';
-
-	let { form }: { form: ActionData } = $props();
+	import { page } from '$app/stores';
 
 	let loading = $state(false);
+	let error = $derived($page.url.searchParams.get('error'));
+
+	function signInWithApple() {
+		loading = true;
+		// Redirect to server route that handles Apple Sign-In initiation
+		window.location.href = '/auth/apple';
+	}
 </script>
 
 <svelte:head>
@@ -33,73 +37,38 @@
 		<div class="bg-[var(--surface-raised)]/80 backdrop-blur-xl border border-[var(--border-subtle)] rounded-2xl p-6 sm:p-8 shadow-xl">
 			<h2 class="text-xl font-semibold text-[var(--text-primary)] mb-6 text-center">Sign in to your account</h2>
 
-			{#if form?.error}
+			{#if error}
 				<div class="mb-6 p-4 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/20 flex items-start gap-3">
 					<AlertCircle class="size-5 text-[var(--color-error)] flex-shrink-0 mt-0.5" />
-					<p class="text-sm text-[var(--color-error)]">{form.error}</p>
+					<p class="text-sm text-[var(--color-error)]">
+						{error === 'auth_failed' ? 'Authentication failed. Please try again.' : error}
+					</p>
 				</div>
 			{/if}
 
-			<form
-				method="POST"
-				use:enhance={() => {
-					loading = true;
-					return async ({ update }) => {
-						loading = false;
-						await update();
-					};
-				}}
-				class="space-y-5"
+			<!-- Apple Sign-In Button -->
+			<Button
+				onclick={signInWithApple}
+				class="w-full h-12 bg-white hover:bg-gray-100 text-black border border-gray-300"
+				disabled={loading}
 			>
-				<!-- Email -->
-				<div>
-					<label for="email" class="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-						Email address
-					</label>
-					<div class="relative">
-						<Mail class="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-[var(--text-muted)]" />
-						<input
-							type="email"
-							id="email"
-							name="email"
-							required
-							autocomplete="email"
-							value={form?.email ?? ''}
-							class="w-full h-11 pl-11 pr-4 rounded-lg bg-[var(--surface-overlay)] border border-[var(--border-default)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[var(--accent-primary)]/20 transition-all"
-							placeholder="you@example.com"
-						/>
-					</div>
-				</div>
+				{#if loading}
+					<Loader2 class="size-5 animate-spin mr-2" />
+					Connecting...
+				{:else}
+					<!-- Apple Logo SVG -->
+					<svg class="size-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+					</svg>
+					Sign in with Apple
+				{/if}
+			</Button>
 
-				<!-- Password -->
-				<div>
-					<label for="password" class="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-						Password
-					</label>
-					<div class="relative">
-						<Lock class="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-[var(--text-muted)]" />
-						<input
-							type="password"
-							id="password"
-							name="password"
-							required
-							autocomplete="current-password"
-							class="w-full h-11 pl-11 pr-4 rounded-lg bg-[var(--surface-overlay)] border border-[var(--border-default)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[var(--accent-primary)]/20 transition-all"
-							placeholder="Enter your password"
-						/>
-					</div>
-				</div>
-
-				<!-- Submit -->
-				<Button type="submit" class="w-full h-11" disabled={loading}>
-					{#if loading}
-						<Loader2 class="size-4 animate-spin" />
-						Signing in...
-					{:else}
-						Sign in
-					{/if}
-				</Button>
-			</form>
+			<p class="mt-6 text-center text-xs text-[var(--text-muted)]">
+				Your Apple ID is used securely for authentication only.
+				<br />
+				We never see your Apple password.
+			</p>
 		</div>
 
 		<!-- Footer -->

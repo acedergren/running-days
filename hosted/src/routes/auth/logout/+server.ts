@@ -9,9 +9,16 @@ import {
 	getSessionCookie,
 	clearSessionCookie
 } from '$lib/server/auth/session.js';
+import { applyRateLimit } from '$lib/server/rate-limiter.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ cookies, request, getClientAddress }) => {
+	// Apply rate limiting
+	const rateLimitResponse = applyRateLimit(getClientAddress(), '/auth/logout');
+	if (rateLimitResponse) {
+		return rateLimitResponse;
+	}
+
 	const sessionId = getSessionCookie(cookies);
 
 	if (sessionId) {

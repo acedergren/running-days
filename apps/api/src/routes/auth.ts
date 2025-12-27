@@ -1,194 +1,260 @@
 /**
  * Authentication Routes
+ *
+ * Supports Apple Sign-In OAuth with PKCE and nonce validation.
+ * Password auth has been removed in favor of Apple Sign-In only.
  */
 
 import { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
-import * as argon2 from 'argon2';
 import { eq, and } from 'drizzle-orm';
 import { users, refreshTokens } from '@running-days/database';
 import { hashToken } from '../plugins/auth.js';
 import { config } from '../config.js';
-
-// Validation schemas
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8)
-});
-
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8)
-});
+import {
+  getAppleAuthUrl,
+  authenticateWithApple,
+  generateCodeVerifier,
+  generateCodeChallenge,
+  generateNonce,
+  generateState
+} from '../lib/apple-auth.js';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
+  // ============================================================================
+  // APPLE SIGN-IN ROUTES
+  // ============================================================================
+
   /**
-   * POST /api/v1/auth/register
-   * Create a new user account
+   * GET /api/v1/auth/apple
+   * Initiate Apple Sign-In flow
+   * Returns the authorization URL and sets security cookies
    */
-  fastify.post('/register', async (request, reply) => {
-    const parseResult = registerSchema.safeParse(request.body);
-    if (!parseResult.success) {
-      return reply.badRequest(parseResult.error.message);
-    }
+  fastify.get('/apple', async (request, reply) => {
+    // Generate security tokens
+    const state = generateState();
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    const nonce = generateNonce();
 
-    const { email, password } = parseResult.data;
+    // Cookie options
+    const cookieOptions = {
+      httpOnly: true,
+      secure: config.cookieSecure,
+      sameSite: 'lax' as const,
+      path: '/api/v1/auth',
+      maxAge: 600 // 10 minutes
+    };
 
-    // Check if user already exists
-    const existingUser = await fastify.db.query.users.findFirst({
-      where: eq(users.email, email)
-    });
+    // Set security cookies
+    reply.setCookie('apple_auth_state', state, cookieOptions);
+    reply.setCookie('apple_auth_verifier', codeVerifier, cookieOptions);
+    reply.setCookie('apple_auth_nonce', nonce, cookieOptions);
 
-    if (existingUser) {
-      return reply.conflict('User with this email already exists');
-    }
+    // Generate auth URL
+    const authUrl = getAppleAuthUrl(state, codeChallenge, nonce);
 
-    // Hash password
-    const passwordHash = await argon2.hash(password);
-
-    // Create user
-    const [newUser] = await fastify.db
-      .insert(users)
-      .values({
-        email,
-        passwordHash,
-        role: 'user'
-      })
-      .returning();
-
-    // Log audit event
-    fastify.auditLogger.logAuditEvent({
-      user_id: newUser.id,
-      ip_address: request.ip,
-      user_agent: request.headers['user-agent'] || 'unknown',
-      action: 'LOGIN',
-      resource: '/auth/register',
-      resource_type: 'user',
-      outcome: 'success',
-      phi_accessed: false
-    });
-
-    return reply.code(201).send({
-      success: true,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role
-      }
-    });
+    return { authUrl };
   });
 
   /**
-   * POST /api/v1/auth/login
-   * Authenticate user and issue tokens
+   * POST /api/v1/auth/apple/callback
+   * Handle Apple Sign-In callback
+   * Validates PKCE, nonce, and creates/updates user
    */
-  fastify.post('/login', async (request, reply) => {
-    const parseResult = loginSchema.safeParse(request.body);
-    if (!parseResult.success) {
-      return reply.badRequest(parseResult.error.message);
-    }
+  fastify.post<{
+    Body: { code: string; state: string }
+  }>('/apple/callback', async (request, reply) => {
+    const { code, state } = request.body;
 
-    const { email, password } = parseResult.data;
-
-    // Find user
-    const user = await fastify.db.query.users.findFirst({
-      where: eq(users.email, email)
-    });
-
-    if (!user) {
+    // Validate inputs
+    if (!code || typeof code !== 'string') {
       fastify.auditLogger.logAuthEvent(
         request.raw as unknown as Request,
         null,
         false,
-        'User not found'
+        'Missing authorization code'
       );
-      return reply.unauthorized('Invalid credentials');
+      return reply.badRequest('Missing authorization code');
     }
 
-    if (!user.isActive) {
+    if (!state || typeof state !== 'string') {
       fastify.auditLogger.logAuthEvent(
         request.raw as unknown as Request,
-        user.id,
+        null,
         false,
-        'Account disabled'
+        'Missing state parameter'
       );
-      return reply.forbidden('Account is disabled');
+      return reply.badRequest('Missing state parameter');
     }
 
-    // Verify password
-    const validPassword = await argon2.verify(user.passwordHash, password);
-    if (!validPassword) {
+    // Retrieve security cookies
+    const savedState = request.cookies.apple_auth_state;
+    const codeVerifier = request.cookies.apple_auth_verifier;
+    const expectedNonce = request.cookies.apple_auth_nonce;
+
+    // Clear security cookies
+    reply.clearCookie('apple_auth_state', { path: '/api/v1/auth' });
+    reply.clearCookie('apple_auth_verifier', { path: '/api/v1/auth' });
+    reply.clearCookie('apple_auth_nonce', { path: '/api/v1/auth' });
+
+    // Validate state (CSRF protection)
+    if (state !== savedState) {
       fastify.auditLogger.logAuthEvent(
         request.raw as unknown as Request,
-        user.id,
+        null,
         false,
-        'Invalid password'
+        'Invalid state parameter'
       );
-      return reply.unauthorized('Invalid credentials');
+      return reply.badRequest('Invalid state parameter');
     }
 
-    // Generate tokens
-    const accessToken = await fastify.jwt.sign({
-      sub: user.id,
-      email: user.email,
-      role: user.role as 'user' | 'admin'
-    });
+    // Validate PKCE verifier exists
+    if (!codeVerifier) {
+      fastify.auditLogger.logAuthEvent(
+        request.raw as unknown as Request,
+        null,
+        false,
+        'Missing PKCE verifier'
+      );
+      return reply.badRequest('Missing PKCE verifier - please restart sign-in');
+    }
 
-    const refreshToken = await fastify.jwt.generateRefreshToken();
-    const tokenHash = await hashToken(refreshToken);
+    // Validate nonce exists
+    if (!expectedNonce) {
+      fastify.auditLogger.logAuthEvent(
+        request.raw as unknown as Request,
+        null,
+        false,
+        'Missing nonce'
+      );
+      return reply.badRequest('Missing nonce - please restart sign-in');
+    }
 
-    // Calculate expiry
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + config.refreshTokenExpiryDays);
+    try {
+      // Exchange code for user info
+      const appleUser = await authenticateWithApple(code, codeVerifier, expectedNonce);
 
-    // Store refresh token
-    await fastify.db.insert(refreshTokens).values({
-      userId: user.id,
-      tokenHash,
-      expiresAt: expiresAt.toISOString(),
-      userAgent: request.headers['user-agent'] || null,
-      ipAddress: request.ip
-    });
+      // Check if user exists by Apple ID
+      let user = await fastify.db.query.users.findFirst({
+        where: eq(users.appleUserId, appleUser.sub)
+      });
 
-    // Update last login
-    await fastify.db
-      .update(users)
-      .set({ lastLoginAt: new Date().toISOString() })
-      .where(eq(users.id, user.id));
+      if (!user) {
+        // Create new user
+        const [newUser] = await fastify.db
+          .insert(users)
+          .values({
+            appleUserId: appleUser.sub,
+            email: appleUser.email || null,
+            emailVerified: appleUser.emailVerified ?? false,
+            authProvider: 'apple',
+            role: 'user'
+          })
+          .returning();
 
-    // Log success
-    fastify.auditLogger.logAuthEvent(
-      request.raw as unknown as Request,
-      user.id,
-      true
-    );
+        user = newUser;
 
-    // Set cookies
-    reply.setCookie('rd_access_token', accessToken, {
-      httpOnly: true,
-      secure: config.cookieSecure,
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 15 * 60 // 15 minutes
-    });
-
-    reply.setCookie('rd_refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: config.cookieSecure,
-      sameSite: 'strict',
-      path: '/api/v1/auth',
-      maxAge: config.refreshTokenExpiryDays * 24 * 60 * 60
-    });
-
-    return {
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role
+        fastify.auditLogger.logAuditEvent({
+          user_id: user.id,
+          ip_address: request.ip,
+          user_agent: request.headers['user-agent'] || 'unknown',
+          action: 'LOGIN',
+          resource: '/auth/apple/callback',
+          resource_type: 'user',
+          outcome: 'success',
+          phi_accessed: false
+        });
       }
-    };
+
+      if (!user.isActive) {
+        fastify.auditLogger.logAuthEvent(
+          request.raw as unknown as Request,
+          user.id,
+          false,
+          'Account disabled'
+        );
+        return reply.forbidden('Account is disabled');
+      }
+
+      // Generate tokens
+      const accessToken = await fastify.jwt.sign({
+        sub: user.id,
+        email: user.email ?? '',
+        role: user.role as 'user' | 'admin'
+      });
+
+      const refreshToken = await fastify.jwt.generateRefreshToken();
+      const tokenHash = await hashToken(refreshToken);
+
+      // Calculate expiry
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + config.refreshTokenExpiryDays);
+
+      // Store refresh token
+      await fastify.db.insert(refreshTokens).values({
+        userId: user.id,
+        tokenHash,
+        expiresAt: expiresAt.toISOString(),
+        userAgent: request.headers['user-agent'] || null,
+        ipAddress: request.ip
+      });
+
+      // Update last login
+      await fastify.db
+        .update(users)
+        .set({ lastLoginAt: new Date().toISOString() })
+        .where(eq(users.id, user.id));
+
+      // Log success
+      fastify.auditLogger.logAuthEvent(
+        request.raw as unknown as Request,
+        user.id,
+        true
+      );
+
+      // Set cookies
+      reply.setCookie('rd_access_token', accessToken, {
+        httpOnly: true,
+        secure: config.cookieSecure,
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 15 * 60 // 15 minutes
+      });
+
+      reply.setCookie('rd_refresh_token', refreshToken, {
+        httpOnly: true,
+        secure: config.cookieSecure,
+        sameSite: 'strict',
+        path: '/',
+        maxAge: config.refreshTokenExpiryDays * 24 * 60 * 60
+      });
+
+      return {
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role
+        }
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      fastify.log.error({ err }, 'Apple auth error');
+
+      fastify.auditLogger.logAuthEvent(
+        request.raw as unknown as Request,
+        null,
+        false,
+        message.includes('Nonce') ? 'nonce_mismatch' : 'token_exchange_failed'
+      );
+
+      return reply.internalServerError('Authentication failed');
+    }
   });
+
+  // ============================================================================
+  // SESSION MANAGEMENT ROUTES (work with any auth provider)
+  // ============================================================================
 
   /**
    * POST /api/v1/auth/logout
@@ -209,7 +275,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Clear cookies
     reply.clearCookie('rd_access_token', { path: '/' });
-    reply.clearCookie('rd_refresh_token', { path: '/api/v1/auth' });
+    reply.clearCookie('rd_refresh_token', { path: '/' });
 
     return { success: true };
   });
@@ -237,7 +303,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (!storedToken) {
       reply.clearCookie('rd_access_token', { path: '/' });
-      reply.clearCookie('rd_refresh_token', { path: '/api/v1/auth' });
+      reply.clearCookie('rd_refresh_token', { path: '/' });
       return reply.unauthorized('Invalid refresh token');
     }
 
@@ -249,7 +315,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         .where(eq(refreshTokens.id, storedToken.id));
 
       reply.clearCookie('rd_access_token', { path: '/' });
-      reply.clearCookie('rd_refresh_token', { path: '/api/v1/auth' });
+      reply.clearCookie('rd_refresh_token', { path: '/' });
       return reply.unauthorized('Refresh token expired');
     }
 
@@ -271,7 +337,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     // Generate new tokens
     const newAccessToken = await fastify.jwt.sign({
       sub: user.id,
-      email: user.email,
+      email: user.email ?? '',
       role: user.role as 'user' | 'admin'
     });
 
@@ -303,7 +369,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       httpOnly: true,
       secure: config.cookieSecure,
       sameSite: 'strict',
-      path: '/api/v1/auth',
+      path: '/',
       maxAge: config.refreshTokenExpiryDays * 24 * 60 * 60
     });
 

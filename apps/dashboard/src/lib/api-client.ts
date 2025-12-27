@@ -5,8 +5,8 @@
 
 import { env } from '$env/dynamic/private';
 
-// API Base URL from environment
-const API_BASE_URL = env.API_BASE_URL || 'http://localhost:3000';
+// API Base URL from environment (default matches API config default port)
+const API_BASE_URL = env.API_BASE_URL || 'http://localhost:3001';
 
 // ============================================================================
 // Response Types
@@ -223,11 +223,36 @@ export class ApiClient {
   // Auth Endpoints
   // ========================================================================
 
-  async login(email: string, password: string): Promise<{ response: Response; data: LoginResponse }> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+  /**
+   * Initiate Apple Sign-In flow
+   * Returns the Apple authorization URL and sets security cookies
+   */
+  async initiateAppleSignIn(): Promise<{ authUrl: string; response: Response }> {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/apple`, {
+      method: 'GET',
+      headers: this.cookies ? { 'Cookie': this.cookies } : {},
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, response.statusText);
+    }
+
+    const data = await response.json() as { authUrl: string };
+    return { authUrl: data.authUrl, response };
+  }
+
+  /**
+   * Complete Apple Sign-In by exchanging the authorization code
+   */
+  async completeAppleSignIn(code: string, state: string): Promise<{ response: Response; data: LoginResponse }> {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/apple/callback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.cookies ? { 'Cookie': this.cookies } : {})
+      },
+      body: JSON.stringify({ code, state }),
       credentials: 'include'
     });
 

@@ -128,26 +128,32 @@ export function clearSessionCookie(cookies: Cookies): void {
 // ============================================================================
 
 /**
- * Handle session timeout behavior
+ * Check if a session should be extended based on the hybrid timeout policy
  *
- * @param session - Current session
- * @param now - Current timestamp
- * @returns Whether to extend the session
+ * Policy: Extend session only if more than half the session duration has passed.
+ * This balances security (sessions eventually expire) with UX (active users stay logged in).
+ *
+ * @param sessionId - The session ID to check
+ * @returns Whether to extend the session, or false if session not found
  */
-export function shouldExtendSession(session: Session, now: Date): boolean {
-	// TODO: Implement your preferred session timeout behavior
-	// Consider: security requirements, user experience, compliance needs
-	//
-	// Example approaches:
-	// 1. Never extend (most secure): return false;
-	// 2. Always extend (best UX): return true;
-	// 3. Hybrid - extend if past halfway point:
-	//    const halfLife = (session.expiresAt.getTime() - session.createdAt.getTime()) / 2;
-	//    return now.getTime() > session.createdAt.getTime() + halfLife;
+export async function shouldExtendSession(sessionId: string): Promise<boolean> {
+	const session = await queryOne<{ EXPIRES_AT: Date }>(
+		`SELECT expires_at FROM sessions WHERE id = :sessionId AND expires_at > SYSTIMESTAMP`,
+		{ sessionId }
+	);
 
-	// Default: Hybrid approach - extend if more than half the session has passed
+	if (!session) {
+		return false;
+	}
+
+	const now = new Date();
 	const sessionDuration = SESSION_DURATION_HOURS * 60 * 60 * 1000;
-	const elapsed = now.getTime() - (session.expiresAt.getTime() - sessionDuration);
+
+	// Calculate when the session was created based on expiry
+	const createdAt = new Date(session.EXPIRES_AT.getTime() - sessionDuration);
+	const elapsed = now.getTime() - createdAt.getTime();
+
+	// Extend only if more than half the session has passed
 	return elapsed > sessionDuration / 2;
 }
 

@@ -10,9 +10,9 @@ import { createApiClient, ApiError } from '$lib/api-client';
 // Routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/auth/login',
-  '/auth/register',
-  '/auth/forgot-password',
-  '/api'  // API routes handled separately
+  '/auth/apple',           // Apple Sign-In initiation
+  '/auth/apple/callback',  // Apple Sign-In callback
+  '/api'                   // API routes handled separately
 ];
 
 function isPublicRoute(pathname: string): boolean {
