@@ -31,9 +31,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "check": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "check": "tsc --noEmit"
   },
   "dependencies": {
     "@running-days/types": "workspace:*",

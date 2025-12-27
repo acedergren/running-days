@@ -1,0 +1,38 @@
+{
+  "name": "@running-days/dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.1.1",
+    "@fontsource/jetbrains-mono": "^5.1.1",
+    "@fontsource/space-grotesk": "^5.1.0",
+    "@running-days/types": "workspace:*",
+    "clsx": "^2.1.1",
+    "d3-scale": "^4.0.2",
+    "layerchart": "^1.0.0",
+    "lucide-svelte": "^0.469.0",
+    "tailwind-merge": "^2.6.0",
+    "tailwind-variants": "^0.3.0"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^5.2.0",
+    "@sveltejs/kit": "^2.16.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/d3-scale": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "svelte": "^5.16.2",
+    "svelte-check": "^4.1.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^4.0.16"
+  }
+}
