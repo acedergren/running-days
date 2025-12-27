@@ -1,0 +1,21 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+
+  # Cloudflare datasource - requires manual API token configuration
+  # Configure via Grafana UI: Configuration > Data Sources > Cloudflare
+  # Zone ID: 31366a66887977ff7ece6e1296cc0ffe

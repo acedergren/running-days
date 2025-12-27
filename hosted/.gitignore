@@ -1,0 +1,15 @@
+# Wallet credentials - NEVER commit
+.wallet/
+
+# Environment secrets
+.env
+.env.local
+.env.production
+
+# Node
+node_modules/
+dist/
+build/
+
+# OS
+.DS_Store

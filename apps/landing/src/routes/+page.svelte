@@ -17,6 +17,9 @@
 		Target
 	} from 'lucide-svelte';
 
+	// App URL for CTAs
+	const APP_URL = 'https://app.running-days.com';
+
 	// Demo data for the interactive preview
 	const demoProgress = 82;
 	const demoDays = 247;
@@ -126,6 +129,13 @@
 <svelte:head>
 	<title>Running Days - Track Running Days, Not Streaks</title>
 	<meta name="description" content="A simpler way to build lasting running habits. Track your yearly running goal without the pressure of maintaining streaks." />
+	<meta property="og:title" content="Running Days - Track Running Days, Not Streaks" />
+	<meta property="og:description" content="A simpler way to build lasting running habits. Track your yearly running goal without the pressure of maintaining streaks." />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="https://www.running-days.com" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Running Days - Track Running Days, Not Streaks" />
+	<meta name="twitter:description" content="A simpler way to build lasting running habits. Track your yearly running goal without the pressure of maintaining streaks." />
 </svelte:head>
 
 <main class="relative z-10 overflow-x-hidden">
@@ -238,7 +248,7 @@
 						class:opacity-0={!heroVisible}
 						style="animation-delay: 0.6s;"
 					>
-						<a href="https://app.running-days.com" class="w-full sm:w-auto">
+						<a href={APP_URL} class="w-full sm:w-auto">
 							<button
 								class="glow-button w-full sm:w-auto relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 text-base font-semibold text-white rounded-lg"
 								onclick={createRipple}
@@ -255,7 +265,7 @@
 								{/each}
 							</button>
 						</a>
-						<a href="/dashboard" class="w-full sm:w-auto">
+						<a href={APP_URL} class="w-full sm:w-auto">
 							<Button variant="ghost" class="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base hover:bg-[var(--accent-primary)]/10 transition-all duration-300">
 								View Demo
 								<ChevronRight class="size-5" />
@@ -525,7 +535,7 @@
 							<div class="flex items-center justify-between mb-4 sm:mb-6">
 								<div>
 									<p class="text-[10px] sm:text-xs text-[var(--text-muted)]">Welcome back</p>
-									<p class="font-display font-bold text-sm sm:text-base text-[var(--text-primary)]">Alex's Running Year</p>
+									<p class="font-display font-bold text-sm sm:text-base text-[var(--text-primary)]">Your Running Year</p>
 								</div>
 								<div class="flex items-center gap-1.5 sm:gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-overlay)] px-2 sm:px-3 py-1 sm:py-1.5">
 									<Calendar class="size-2.5 sm:size-3 text-[var(--accent-primary)]" />
@@ -665,7 +675,7 @@
 			<p class="text-base sm:text-lg text-[var(--text-secondary)] mb-8 sm:mb-10">
 				Join runners who've discovered a kinder way to build lasting habits.
 			</p>
-			<a href="https://app.running-days.com">
+			<a href={APP_URL}>
 				<button
 					class="glow-button-large relative overflow-hidden px-10 sm:px-12 py-4 sm:py-5 text-base sm:text-lg font-semibold text-white rounded-xl"
 					onclick={createRipple}
@@ -704,8 +714,8 @@
 					<a href="https://github.com/acedergren/running-days" class="text-xs sm:text-sm text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors">
 						GitHub
 					</a>
-					<a href="/dashboard" class="text-xs sm:text-sm text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors">
-						Demo
+					<a href={APP_URL} class="text-xs sm:text-sm text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors">
+						App
 					</a>
 				</div>
 			</div>

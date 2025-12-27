@@ -33,10 +33,17 @@ drizzle/meta/
 Thumbs.db
 
 # Logs
+logs/
+!logs/.gitkeep
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Observability (local Docker volumes)
+observability/grafana/data/
+observability/prometheus/data/
+observability/loki/data/
 
 # Test coverage
 coverage/

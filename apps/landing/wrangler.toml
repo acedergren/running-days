@@ -1,0 +1,11 @@
+# Cloudflare Pages configuration for Running Days Landing Page
+# Deploy with: npx wrangler pages deploy build --project-name=running-days-landing
+
+name = "running-days-landing"
+compatibility_date = "2024-12-01"
+
+# Static site - no Workers functions needed
+# The build directory is "build" as configured in svelte.config.js
+
+[site]
+bucket = "./build"
