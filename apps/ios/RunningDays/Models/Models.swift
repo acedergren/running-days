@@ -181,6 +181,109 @@ struct Achievement: Codable, Identifiable {
     let isUnlocked: Bool
 }
 
+// MARK: - Sync Response
+
+struct SyncResponse: Codable {
+    let success: Bool
+    let syncId: String
+    let serverTimestamp: String
+    let nextCursor: String?
+    let created: Int
+    let updated: Int
+    let unchanged: Int
+    let conflicts: [SyncConflict]
+}
+
+struct SyncConflict: Codable, Identifiable {
+    var id: String { serverId }
+    let clientId: String?
+    let serverId: String
+    let reason: String
+    let resolution: String
+}
+
+// MARK: - Sync Request
+
+struct SyncRequest: Encodable {
+    let workouts: [ProcessedWorkout]
+    let mode: String
+    let idempotencyKey: String
+    let clientSyncTimestamp: String
+
+    init(workouts: [ProcessedWorkout], mode: SyncMode = .incremental) {
+        self.workouts = workouts
+        self.mode = mode.rawValue
+        self.idempotencyKey = UUID().uuidString
+        self.clientSyncTimestamp = ISO8601DateFormatter().string(from: Date())
+    }
+}
+
+enum SyncMode: String {
+    case full
+    case incremental
+}
+
+// MARK: - Processed Workout (for HealthKit sync)
+
+struct ProcessedWorkout: Codable, Identifiable {
+    let id: String
+    let clientId: String
+    let startTime: String
+    let endTime: String
+    let durationSeconds: Int
+    let distanceMeters: Double
+    let energyBurnedKcal: Double?
+    let avgHeartRate: Int?
+    let maxHeartRate: Int?
+    let avgPaceSecondsPerKm: Double?
+    let source: String
+
+    init(
+        id: String = UUID().uuidString,
+        clientId: String,
+        startTime: Date,
+        endTime: Date,
+        durationSeconds: Int,
+        distanceMeters: Double,
+        energyBurnedKcal: Double? = nil,
+        avgHeartRate: Int? = nil,
+        maxHeartRate: Int? = nil,
+        avgPaceSecondsPerKm: Double? = nil,
+        source: String = "healthkit"
+    ) {
+        self.id = id
+        self.clientId = clientId
+        self.startTime = ISO8601DateFormatter().string(from: startTime)
+        self.endTime = ISO8601DateFormatter().string(from: endTime)
+        self.durationSeconds = durationSeconds
+        self.distanceMeters = distanceMeters
+        self.energyBurnedKcal = energyBurnedKcal
+        self.avgHeartRate = avgHeartRate
+        self.maxHeartRate = maxHeartRate
+        self.avgPaceSecondsPerKm = avgPaceSecondsPerKm
+        self.source = source
+    }
+}
+
+// MARK: - Sync Status Response
+
+struct SyncStatusResponse: Codable {
+    let lastSyncAt: String?
+    let serverCursor: String
+    let totalWorkouts: Int
+    let pendingSync: Int
+    let oldestWorkout: String?
+    let newestWorkout: String?
+}
+
+// MARK: - Workouts List Response
+
+struct WorkoutsListResponse: Codable {
+    let workouts: [Workout]
+    let nextCursor: String?
+    let hasMore: Bool
+}
+
 // MARK: - Workout Summary (for UI)
 
 struct WorkoutSummary: Identifiable {

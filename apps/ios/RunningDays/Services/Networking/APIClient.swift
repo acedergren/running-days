@@ -238,14 +238,61 @@ extension APIClient {
     func fetchInsights() async throws -> InsightsResponse {
         try await get("stats/insights")
     }
+}
 
-    /// Upload workouts from HealthKit
-    func uploadWorkouts(_ workouts: [ProcessedWorkout]) async throws {
-        struct UploadRequest: Encodable {
-            let workouts: [ProcessedWorkout]
+// MARK: - Sync Service
+
+extension APIClient {
+    /// Sync workouts from HealthKit to the backend
+    /// Uses idempotency key for retry safety
+    func syncWorkouts(_ workouts: [ProcessedWorkout], mode: SyncMode = .incremental) async throws -> SyncResponse {
+        let request = SyncRequest(workouts: workouts, mode: mode)
+        return try await post("workouts/sync", body: request)
+    }
+
+    /// Fetch user's workouts with pagination
+    func fetchWorkouts(cursor: String? = nil, limit: Int = 50, since: Date? = nil, year: Int? = nil) async throws -> WorkoutsListResponse {
+        var path = "workouts?limit=\(limit)"
+
+        if let cursor = cursor {
+            path += "&cursor=\(cursor)"
         }
 
-        try await post("webhook/batch", body: UploadRequest(workouts: workouts))
+        if let since = since {
+            let formatter = ISO8601DateFormatter()
+            path += "&since=\(formatter.string(from: since))"
+        }
+
+        if let year = year {
+            path += "&year=\(year)"
+        }
+
+        return try await get(path)
+    }
+
+    /// Fetch a single workout by ID
+    func fetchWorkout(id: String) async throws -> Workout {
+        struct WorkoutResponse: Decodable {
+            let workout: Workout
+        }
+        let response: WorkoutResponse = try await get("workouts/\(id)")
+        return response.workout
+    }
+
+    /// Delete a workout
+    func deleteWorkout(id: String) async throws {
+        try await delete("workouts/\(id)")
+    }
+
+    /// Fetch sync status
+    func fetchSyncStatus() async throws -> SyncStatusResponse {
+        try await get("sync/status")
+    }
+
+    /// Legacy method - forwards to new sync API
+    @available(*, deprecated, message: "Use syncWorkouts instead")
+    func uploadWorkouts(_ workouts: [ProcessedWorkout]) async throws {
+        _ = try await syncWorkouts(workouts)
     }
 }
 

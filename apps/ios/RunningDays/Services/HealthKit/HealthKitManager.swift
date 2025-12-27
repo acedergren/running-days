@@ -47,6 +47,7 @@ final class HealthKitManager {
 
     private enum Keys {
         static let lastSync = "healthKitLastSync"
+        static let serverCursor = "healthKitServerCursor"
     }
 
     /// Types we need to read from HealthKit
@@ -243,10 +244,9 @@ final class HealthKitManager {
         }
 
         return ProcessedWorkout(
-            id: workout.uuid.uuidString,
-            date: workout.startDate.formatted(.iso8601.year().month().day()),
-            startTime: workout.startDate.ISO8601Format(),
-            endTime: workout.endDate.ISO8601Format(),
+            clientId: workout.uuid.uuidString,
+            startTime: workout.startDate,
+            endTime: workout.endDate,
             durationSeconds: durationSeconds,
             distanceMeters: distanceMeters,
             energyBurnedKcal: energyBurnedKcal,
@@ -262,26 +262,72 @@ final class HealthKitManager {
 
     // MARK: - Sync
 
-    /// Sync workouts with the backend
-    func syncWorkouts() async throws {
+    /// Sync result type
+    enum SyncResult {
+        case success(created: Int, updated: Int, unchanged: Int, conflicts: [SyncConflict])
+        case noNewWorkouts
+        case rateLimited(retryAfter: Int)
+        case error(Error)
+    }
+
+    /// Server cursor for incremental sync (stored in UserDefaults)
+    private(set) var serverCursor: String? {
+        get {
+            UserDefaults.standard.string(forKey: Keys.serverCursor)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Keys.serverCursor)
+        }
+    }
+
+    /// Sync workouts with the backend using the new sync API
+    func syncWorkouts() async throws -> SyncResult {
         let newWorkouts = try await queryNewWorkouts()
 
         guard !newWorkouts.isEmpty else {
             lastSyncDate = Date()
-            return
+            return .noNewWorkouts
         }
 
         let apiWorkouts = convertToAPIWorkouts(newWorkouts)
 
-        // Upload to backend (this will be implemented in the networking layer)
-        // try await APIClient.shared.uploadWorkouts(apiWorkouts)
+        do {
+            let response = try await APIClient.shared.syncWorkouts(apiWorkouts)
 
-        lastSyncDate = Date()
+            // Store server cursor for next incremental sync
+            if let cursor = response.nextCursor {
+                serverCursor = cursor
+            }
+
+            // Update last sync timestamp
+            lastSyncDate = Date()
+
+            return .success(
+                created: response.created,
+                updated: response.updated,
+                unchanged: response.unchanged,
+                conflicts: response.conflicts
+            )
+        } catch NetworkError.serverError(429) {
+            // Rate limited - extract retry-after if available
+            return .rateLimited(retryAfter: 60) // Default to 60 seconds
+        } catch {
+            return .error(error)
+        }
     }
 
     /// Mark sync as completed (call after successful API upload)
     func markSyncComplete() {
         lastSyncDate = Date()
+    }
+
+    /// Handle sync conflicts (e.g., log them or notify user)
+    func handleConflicts(_ conflicts: [SyncConflict]) {
+        // For now, just log the conflicts
+        // In a real app, you might want to show these to the user
+        for conflict in conflicts {
+            print("Sync conflict: \(conflict.reason) for workout \(conflict.serverId)")
+        }
     }
 }
 
@@ -305,18 +351,4 @@ enum HealthKitError: LocalizedError {
             return "Invalid date range for query"
         }
     }
-}
-
-// MARK: - Processed Workout Model
-
-struct ProcessedWorkout: Codable, Identifiable {
-    let id: String
-    let date: String           // YYYY-MM-DD format
-    let startTime: String      // ISO8601 format
-    let endTime: String        // ISO8601 format
-    let durationSeconds: Int
-    let distanceMeters: Double
-    let energyBurnedKcal: Double?
-    let avgPaceSecondsPerKm: Double?
-    let source: String
 }

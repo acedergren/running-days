@@ -146,6 +146,63 @@ CREATE TABLE consent_records (
 CREATE INDEX idx_consent_user ON consent_records(user_id);
 `;
 
+// Migration SQL for sync feature (to be run separately)
+export const SYNC_MIGRATION_SQL = `
+-- Add sync columns to workouts table
+ALTER TABLE workouts ADD (
+  sync_version NUMBER DEFAULT 1,
+  client_id VARCHAR2(100),
+  last_synced_at TIMESTAMP
+);
+
+CREATE INDEX idx_workouts_user_start ON workouts(user_id, start_time);
+CREATE INDEX idx_workouts_client_id ON workouts(user_id, client_id);
+
+-- Idempotency tracking for sync retry safety
+CREATE TABLE sync_idempotency (
+  id VARCHAR2(36) PRIMARY KEY,
+  user_id VARCHAR2(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  idempotency_key VARCHAR2(64) NOT NULL,
+  response_body CLOB,
+  response_status NUMBER(3),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL,
+  CONSTRAINT uq_idempotency_user_key UNIQUE (user_id, idempotency_key)
+);
+
+CREATE INDEX idx_idempotency_expires ON sync_idempotency(expires_at);
+CREATE INDEX idx_idempotency_user ON sync_idempotency(user_id);
+
+-- User sync state for incremental sync cursor
+CREATE TABLE user_sync_state (
+  user_id VARCHAR2(255) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  last_sync_at TIMESTAMP,
+  last_sync_id VARCHAR2(36),
+  server_cursor VARCHAR2(100),
+  total_syncs NUMBER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Sync history for audit and debugging
+CREATE TABLE sync_history (
+  id VARCHAR2(36) PRIMARY KEY,
+  user_id VARCHAR2(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  sync_mode VARCHAR2(20) NOT NULL,
+  workouts_received NUMBER NOT NULL,
+  workouts_created NUMBER NOT NULL,
+  workouts_updated NUMBER NOT NULL,
+  workouts_unchanged NUMBER NOT NULL,
+  conflicts_count NUMBER DEFAULT 0,
+  duration_ms NUMBER,
+  ip_address VARCHAR2(45),
+  user_agent VARCHAR2(500),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_sync_history_user ON sync_history(user_id, created_at);
+`;
+
 // TypeScript types for the schema
 export interface User {
   id: string;
@@ -174,6 +231,10 @@ export interface Workout {
   source: string;
   createdAt: Date;
   updatedAt: Date;
+  // Sync-related fields
+  syncVersion: number;
+  clientId: string | null;
+  lastSyncedAt: Date | null;
 }
 
 export interface DailyStat {
@@ -229,4 +290,55 @@ export interface AuditLogEntry {
   userAgent: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: Date;
+}
+
+// Sync-related types
+export interface SyncIdempotency {
+  id: string;
+  userId: string;
+  idempotencyKey: string;
+  responseBody: string | null;
+  responseStatus: number | null;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+export interface UserSyncState {
+  userId: string;
+  lastSyncAt: Date | null;
+  lastSyncId: string | null;
+  serverCursor: string | null;
+  totalSyncs: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SyncHistory {
+  id: string;
+  userId: string;
+  syncMode: 'full' | 'incremental';
+  workoutsReceived: number;
+  workoutsCreated: number;
+  workoutsUpdated: number;
+  workoutsUnchanged: number;
+  conflictsCount: number;
+  durationMs: number | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: Date;
+}
+
+// Sync API types
+export type SyncMode = 'full' | 'incremental';
+
+export type ConflictReason = 'duplicate_start_time' | 'data_mismatch' | 'server_newer';
+
+export type ConflictResolution = 'kept_server' | 'kept_client' | 'merged' | 'created';
+
+export interface SyncConflict {
+  clientId: string | null;
+  serverId: string;
+  reason: ConflictReason;
+  resolution: ConflictResolution;
+  serverWorkout?: Workout;
 }
