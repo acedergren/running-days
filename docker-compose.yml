@@ -1,0 +1,98 @@
+# Running Days - Local Development
+# =============================================================================
+# Usage:
+#   docker compose up              # Start all services
+#   docker compose up api          # Start API only
+#   docker compose up dashboard    # Start dashboard only
+#   docker compose up -d           # Start in background
+#   docker compose logs -f api     # Follow API logs
+#   docker compose down            # Stop all services
+#
+# With observability:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend API (Fastify)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: running-days-api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DATABASE_PATH=/app/data/running-days.db
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production}
+      - CORS_ORIGIN=http://localhost:3001
+      - LOG_LEVEL=info
+    volumes:
+      - api-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - running-days
+
+  # ---------------------------------------------------------------------------
+  # Dashboard (SvelteKit)
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    container_name: running-days-dashboard
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      - ORIGIN=http://localhost:3001
+      - API_BASE_URL=http://api:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001').then(r => r.ok ? process.exit(0) : process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - running-days
+
+  # ---------------------------------------------------------------------------
+  # Landing Page (Static - optional, for full stack testing)
+  # ---------------------------------------------------------------------------
+  landing:
+    build:
+      context: .
+      dockerfile: apps/landing/Dockerfile
+    container_name: running-days-landing
+    ports:
+      - "3002:80"
+    profiles:
+      - full
+    restart: unless-stopped
+    networks:
+      - running-days
+
+volumes:
+  api-data:
+    name: running-days-api-data
+
+networks:
+  running-days:
+    driver: bridge

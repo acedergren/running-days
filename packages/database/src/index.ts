@@ -5,8 +5,12 @@
  * Supports SQLite (development) and PostgreSQL (production).
  */
 
+import { createRequire } from 'module';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema.js';
+
+// Create require function for ESM compatibility with better-sqlite3
+const require = createRequire(import.meta.url);
 
 export * from './schema.js';
 
@@ -24,8 +28,6 @@ export interface DatabaseConfig {
  */
 export function createDatabase(config: DatabaseConfig): Database {
   if (config.type === 'sqlite') {
-    // Dynamic import to avoid bundling better-sqlite3 in browser
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Database = require('better-sqlite3');
     const sqlite = new Database(config.path);
     sqlite.pragma('journal_mode = WAL');

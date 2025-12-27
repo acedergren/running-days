@@ -10,23 +10,31 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 # Copy workspace configuration
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
 COPY turbo.json ./
 
-# Copy package.json files for required workspaces
+# Copy ALL package.json files to satisfy pnpm workspace resolution
 COPY packages/types/package.json ./packages/types/
+COPY packages/utils/package.json ./packages/utils/
+COPY packages/database/package.json ./packages/database/
+COPY packages/business-logic/package.json ./packages/business-logic/
+COPY packages/observability/package.json ./packages/observability/
+COPY apps/api/package.json ./apps/api/
 COPY apps/dashboard/package.json ./apps/dashboard/
+COPY apps/landing/package.json ./apps/landing/
+COPY apps/web/package.json ./apps/web/
 
-# Install dependencies
+# Install ALL dependencies (need devDependencies for building)
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copy source code for types and dashboard only
 COPY packages/types/ ./packages/types/
 COPY apps/dashboard/ ./apps/dashboard/
 
 # Build types package first, then dashboard
-RUN pnpm --filter "@running-days/types" build && \
-    pnpm --filter "@running-days/dashboard" build
+# Use explicit paths to hoisted binaries in root node_modules
+RUN cd packages/types && /app/node_modules/.bin/tsc && \
+    cd /app/apps/dashboard && /app/node_modules/.bin/svelte-kit sync && /app/node_modules/.bin/vite build
 
 # ============================================================================
 # Stage 2: Production image
@@ -40,10 +48,10 @@ WORKDIR /app
 
 # Copy built application (SvelteKit with adapter-node)
 COPY --from=builder /app/apps/dashboard/build ./build
-COPY --from=builder /app/apps/dashboard/package.json ./
 
-# Install production dependencies only (minimal for adapter-node)
-RUN npm install --omit=dev
+# Create minimal package.json with only runtime dependencies (no workspace:* protocol)
+RUN echo '{"name":"@running-days/dashboard","type":"module","dependencies":{"clsx":"^2.1.1","tailwind-merge":"^2.6.0","tailwind-variants":"^0.3.0"}}' > package.json && \
+    npm install --omit=dev
 
 # Set ownership
 RUN chown -R appuser:appgroup /app

@@ -356,6 +356,9 @@ importers:
 
   packages/database:
     dependencies:
+      better-sqlite3:
+        specifier: ^11.6.0
+        version: 11.10.0
       drizzle-orm:
         specifier: ^0.38.0
         version: 0.38.4(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)
@@ -363,9 +366,6 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.11
         version: 7.6.13
-      better-sqlite3:
-        specifier: ^11.6.0
-        version: 11.10.0
       drizzle-kit:
         specifier: ^0.31.0
         version: 0.31.8
