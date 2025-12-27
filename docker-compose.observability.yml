@@ -12,8 +12,9 @@ services:
       - grafana-data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - prometheus
       - loki
     networks:
       - observability
@@ -21,8 +22,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: running-days-prometheus
-    ports:
-      - "9090:9090"
+    network_mode: host  # Use host networking to access localhost:5173
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -31,10 +31,6 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - observability
 
   loki:
     image: grafana/loki:3.3.2

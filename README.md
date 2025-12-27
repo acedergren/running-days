@@ -42,60 +42,169 @@ With a 300-day goal, you can:
 - **Year-Long Progress**: See your running days accumulate throughout the year
 - **On-Track Indicator**: Know if you're ahead or behind your goal pace
 - **Automatic Sync**: Connects to Apple Health via Health Auto Export
-- **Lifetime Stats**: Total distance, time, and average pace
+- **Goal Management**: Set and adjust yearly targets via the settings page
+- **Insights Dashboard**: Monthly charts, pace trends, and personal bests
 - **PWA Support**: Install on your phone for quick access
 - **Beautiful Dark UI**: Easy on the eyes during early morning runs
 
-## How It Works
+## Architecture
 
-1. **Set your goal** (default: 300 running days per year)
-2. **Run when you can** - morning, evening, 5K or marathon
-3. **Watch your days add up** - every run counts as one day
-4. **Stay on pace** - the app shows if you're ahead or behind
+Running Days is built as a **monorepo** with separate frontend and backend services:
 
-Multiple runs in one day? Still counts as 1 day. The focus is on *showing up consistently*, not logging maximum volume.
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Landing Page   │     │   Dashboard     │     │   Mobile App    │
+│ (Static Svelte) │     │   (SvelteKit)   │     │    (Future)     │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         │                       ▼                       │
+         │              ┌─────────────────┐              │
+         └──────────────│   Backend API   │──────────────┘
+                        │    (Fastify)    │
+                        └────────┬────────┘
+                                 │
+                        ┌────────▼────────┐
+                        │   PostgreSQL    │
+                        │   (SQLite dev)  │
+                        └─────────────────┘
+```
+
+### Monorepo Structure
+
+```
+running-days/
+├── packages/
+│   ├── types/            # Shared TypeScript types
+│   ├── utils/            # Formatters, date utilities
+│   ├── database/         # Drizzle ORM schema
+│   ├── business-logic/   # Auth, workout processing, goals
+│   └── observability/    # Logging, metrics, audit
+│
+├── apps/
+│   ├── api/              # Fastify Backend API
+│   ├── landing/          # Static landing page (www.running-days.com)
+│   ├── dashboard/        # SvelteKit web app (app.running-days.com)
+│   └── web/              # Legacy monolith (deprecated)
+│
+└── docker-compose.yml    # Local development orchestration
+```
 
 ## Tech Stack
 
-- **Framework**: SvelteKit 2 with Svelte 5 (runes)
-- **Styling**: Tailwind CSS 4 with OKLCH color system
-- **Database**: SQLite with Drizzle ORM
-- **Charts**: LayerChart for data visualization
-- **UI**: bits-ui + lucide-svelte icons
+| Layer | Technology |
+|-------|------------|
+| Frontend | SvelteKit 2, Svelte 5 (runes), Tailwind CSS 4 |
+| Backend | Fastify 5, TypeScript |
+| Database | SQLite (dev) / PostgreSQL (prod), Drizzle ORM |
+| Auth | JWT (jose), httpOnly cookies |
+| Charts | LayerChart + D3 |
+| Monorepo | pnpm workspaces + Turborepo |
+| Testing | Vitest |
+| Observability | Pino, Prometheus, Grafana |
 
 ## Quick Start
+
+### Prerequisites
+
+- Node.js 22+
+- pnpm 9+
+
+### Development
 
 ```bash
 # Clone and install
 git clone https://github.com/acedergren/running-days.git
 cd running-days
-npm install
+pnpm install
 
-# Set up database
-npm run db:generate
-npm run db:migrate
+# Build shared packages
+pnpm build
 
-# Start dev server
-npm run dev
+# Start API server (port 3000)
+pnpm --filter @running-days/api dev
+
+# Start dashboard (port 5173)
+pnpm --filter @running-days/dashboard dev
 ```
+
+### Docker Compose
+
+```bash
+# Start all services
+docker compose up
+
+# API:       http://localhost:3000
+# Dashboard: http://localhost:3001
+```
+
+### Environment Variables
+
+Create `.env` files in each app:
+
+**apps/api/.env**
+```bash
+DATABASE_URL=./data/running-days.db
+JWT_SECRET=your-secret-at-least-32-characters
+JWT_REFRESH_SECRET=your-refresh-secret-at-least-32-characters
+```
+
+**apps/dashboard/.env**
+```bash
+API_BASE_URL=http://localhost:3000
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/v1/auth/login` | POST | Login with email/password |
+| `/api/v1/auth/logout` | POST | Clear auth cookies |
+| `/api/v1/auth/refresh` | POST | Refresh access token |
+| `/api/v1/auth/me` | GET | Get current user |
+| `/api/v1/goals` | GET/POST | List/create goals |
+| `/api/v1/goals/:year` | GET/PUT/DELETE | Manage specific goal |
+| `/api/v1/goals/:year/progress` | GET | Full progress with streaks |
+| `/api/v1/stats/dashboard` | GET | Dashboard data |
+| `/api/v1/stats/insights` | GET | Charts and analytics |
+| `/api/webhook` | POST | Health Auto Export webhook |
 
 ## Connecting Apple Health
 
-This app syncs with [Health Auto Export](https://www.healthexportapp.com/) for automatic workout imports:
+This app syncs with [Health Auto Export](https://www.healthexportapp.com/):
 
 1. Install Health Auto Export on your iPhone
-2. Create a webhook token in your Running Days database
-3. Configure the webhook URL: `https://your-domain.com/api/webhook?token=YOUR_TOKEN`
+2. Create a user account via the API
+3. Configure webhook URL: `https://api.running-days.com/api/webhook?token=YOUR_TOKEN`
 4. Select "Running" workouts and enable auto-sync
 
-## Development
+## Commands
 
 ```bash
-npm run dev          # Start dev server
-npm test             # Run tests (42 passing)
-npm run check        # TypeScript check
-npm run db:studio    # Open Drizzle Studio
+# Development
+pnpm dev                          # Start all apps in dev mode
+pnpm build                        # Build all packages
+pnpm test                         # Run all tests
+pnpm check                        # Type-check all packages
+
+# Specific apps
+pnpm --filter @running-days/api dev
+pnpm --filter @running-days/dashboard dev
+pnpm --filter @running-days/landing build
+
+# Database
+pnpm --filter @running-days/database generate
+pnpm --filter @running-days/database migrate
 ```
+
+## CI/CD
+
+The GitHub Actions pipeline:
+1. **Lint & Type Check** - Validates code quality
+2. **Unit Tests** - Runs Vitest test suites
+3. **Build** - Builds all apps in parallel
+4. **Docker** - Builds container images (main branch only)
+5. **Security** - Audits dependencies
 
 ## License
 
