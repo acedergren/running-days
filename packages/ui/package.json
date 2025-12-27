@@ -29,7 +29,10 @@
     }
   },
   "scripts": {
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -39,8 +42,15 @@
     "tailwind-variants": "^0.3.0"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.3.1",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitest/coverage-v8": "^4.0.16",
+    "jsdom": "^27.4.0",
     "svelte": "^5.16.2",
     "svelte-check": "^4.1.4",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.16"
   }
 }
