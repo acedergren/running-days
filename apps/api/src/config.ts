@@ -2,6 +2,11 @@
  * API Configuration
  */
 
+import { randomBytes } from 'crypto';
+
+// Generate a random dev secret on startup (different each run for security)
+const DEV_JWT_SECRET = randomBytes(32).toString('base64');
+
 export interface Config {
   // Server
   port: number;
@@ -59,9 +64,9 @@ export function loadConfig(): Config {
       isDev ? '../../data/running-days.db' : '/data/running-days.db'
     ),
 
-    // JWT - in dev, use a default secret; in prod, require it
+    // JWT - in dev, use a random secret (regenerated each restart); in prod, require it
     jwtSecret: isDev
-      ? getEnvOrDefault('JWT_SECRET', 'dev-secret-do-not-use-in-production-min-32-chars')
+      ? getEnvOrDefault('JWT_SECRET', DEV_JWT_SECRET)
       : getEnvOrThrow('JWT_SECRET'),
     accessTokenExpiry: getEnvOrDefault('ACCESS_TOKEN_EXPIRY', '15m'),
     refreshTokenExpiryDays: parseInt(getEnvOrDefault('REFRESH_TOKEN_EXPIRY_DAYS', '7'), 10),

@@ -171,6 +171,36 @@ export class ApiError extends Error {
 // API Client
 // ============================================================================
 
+/**
+ * Cookies that should be forwarded to the API.
+ * Only forward auth-related cookies, not third-party tracking cookies.
+ */
+const ALLOWED_COOKIES = [
+  'rd_access_token',
+  'rd_refresh_token',
+  'apple_auth_state',
+  'apple_auth_verifier',
+  'apple_auth_nonce'
+];
+
+/**
+ * Parse a cookie string and extract only allowed cookies.
+ * This prevents accidentally forwarding third-party cookies to our API.
+ */
+function filterCookies(cookieString: string): string {
+  if (!cookieString) return '';
+
+  const cookies = cookieString
+    .split(';')
+    .map((c) => c.trim())
+    .filter((c) => {
+      const [name] = c.split('=');
+      return name && ALLOWED_COOKIES.includes(name.trim());
+    });
+
+  return cookies.join('; ');
+}
+
 interface FetchOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   body?: unknown;
@@ -184,7 +214,8 @@ export class ApiClient {
   private cookies: string;
 
   constructor(cookies: string = '') {
-    this.cookies = cookies;
+    // Only keep allowed cookies to prevent leaking third-party cookies
+    this.cookies = filterCookies(cookies);
   }
 
   private async fetch<T>(path: string, options: FetchOptions = {}): Promise<T> {

@@ -10,6 +10,7 @@
 
 import type { Handle } from '@sveltejs/kit';
 import { initDatabase } from '$lib/server/db/index.js';
+import { logger } from '$lib/server/logger.js';
 import {
 	validateSession,
 	getSessionCookie,
@@ -48,7 +49,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				})
 				.catch((err) => {
 					// Extension failure is non-critical - session still valid
-					console.error('Session extension failed:', err);
+					logger.warn({ err }, 'Session extension failed');
 				});
 		}
 	}

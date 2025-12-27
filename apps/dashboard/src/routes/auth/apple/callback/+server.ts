@@ -9,6 +9,47 @@
 import { redirect } from '@sveltejs/kit';
 import { createApiClient, ApiError } from '$lib/api-client';
 import type { RequestHandler } from './$types';
+import type { Cookies } from '@sveltejs/kit';
+
+/**
+ * Cookies we accept from API responses during auth.
+ * Prevents the API from setting arbitrary cookies on the user's browser.
+ */
+const ALLOWED_AUTH_COOKIES = ['rd_access_token', 'rd_refresh_token'];
+
+/**
+ * Safely forward cookies from API response, validating cookie names.
+ */
+function forwardApiCookies(response: Response, cookies: Cookies): void {
+	const setCookieHeaders = response.headers.getSetCookie();
+
+	for (const setCookie of setCookieHeaders) {
+		const parts = setCookie.split(';');
+		const [nameValue] = parts;
+		if (!nameValue) continue;
+
+		const equalsIndex = nameValue.indexOf('=');
+		if (equalsIndex === -1) continue;
+
+		const name = nameValue.slice(0, equalsIndex).trim();
+		const value = nameValue.slice(equalsIndex + 1);
+
+		// Security: Only accept expected cookies from the API
+		if (!ALLOWED_AUTH_COOKIES.includes(name)) {
+			console.warn(`Ignoring unexpected cookie from API: ${name}`);
+			continue;
+		}
+
+		// Set with secure defaults, ignoring API's suggested attributes
+		// (we enforce our own security policy)
+		cookies.set(name, value, {
+			path: '/',
+			httpOnly: true,
+			secure: true,
+			sameSite: 'lax'
+		});
+	}
+}
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
 	const formData = await request.formData();
@@ -28,35 +69,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		const api = createApiClient(cookieHeader);
 		const { response } = await api.completeAppleSignIn(code, state);
 
-		// Forward session cookies from the API
-		const setCookieHeaders = response.headers.getSetCookie();
-		for (const setCookie of setCookieHeaders) {
-			const parts = setCookie.split(';');
-			const [nameValue] = parts;
-			const [name, ...valueParts] = nameValue.split('=');
-			const value = valueParts.join('=');
-
-			const options: {
-				path?: string;
-				httpOnly?: boolean;
-				secure?: boolean;
-				sameSite?: 'lax' | 'strict' | 'none';
-				maxAge?: number;
-			} = { path: '/' };
-
-			for (const part of parts.slice(1)) {
-				const [key, val] = part.trim().split('=');
-				const lowerKey = key.toLowerCase();
-
-				if (lowerKey === 'httponly') options.httpOnly = true;
-				if (lowerKey === 'secure') options.secure = true;
-				if (lowerKey === 'path') options.path = val;
-				if (lowerKey === 'samesite') options.sameSite = val.toLowerCase() as 'lax' | 'strict' | 'none';
-				if (lowerKey === 'max-age') options.maxAge = parseInt(val, 10);
-			}
-
-			cookies.set(name, value, options);
-		}
+		// Forward validated session cookies from the API
+		forwardApiCookies(response, cookies);
 
 		// Clear the security cookies (they're no longer needed)
 		cookies.delete('apple_auth_state', { path: '/' });

@@ -16,8 +16,23 @@ import {
   generateCodeVerifier,
   generateCodeChallenge,
   generateNonce,
-  generateState
+  generateState,
+  safeCompare
 } from '../lib/apple-auth.js';
+
+// Rate limit configuration for auth routes (stricter than global)
+const authRateLimits = {
+  // Initiate auth - moderate limit
+  apple: { max: 10, timeWindow: '1 minute' },
+  // Callback - very strict (sensitive endpoint)
+  appleCallback: { max: 5, timeWindow: '1 minute' },
+  // Token refresh - moderate
+  refresh: { max: 20, timeWindow: '1 minute' },
+  // Logout - moderate
+  logout: { max: 10, timeWindow: '1 minute' },
+  // Session management - moderate
+  sessions: { max: 20, timeWindow: '1 minute' }
+};
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   // ============================================================================
@@ -29,19 +44,21 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
    * Initiate Apple Sign-In flow
    * Returns the authorization URL and sets security cookies
    */
-  fastify.get('/apple', async (request, reply) => {
+  fastify.get('/apple', {
+    config: { rateLimit: authRateLimits.apple }
+  }, async (request, reply) => {
     // Generate security tokens
     const state = generateState();
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
     const nonce = generateNonce();
 
-    // Cookie options
+    // Cookie options - use root path for consistency with session cookies
     const cookieOptions = {
       httpOnly: true,
       secure: config.cookieSecure,
       sameSite: 'lax' as const,
-      path: '/api/v1/auth',
+      path: '/',
       maxAge: 600 // 10 minutes
     };
 
@@ -63,7 +80,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post<{
     Body: { code: string; state: string }
-  }>('/apple/callback', async (request, reply) => {
+  }>('/apple/callback', {
+    config: { rateLimit: authRateLimits.appleCallback }
+  }, async (request, reply) => {
     const { code, state } = request.body;
 
     // Validate inputs
@@ -92,13 +111,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     const codeVerifier = request.cookies.apple_auth_verifier;
     const expectedNonce = request.cookies.apple_auth_nonce;
 
-    // Clear security cookies
-    reply.clearCookie('apple_auth_state', { path: '/api/v1/auth' });
-    reply.clearCookie('apple_auth_verifier', { path: '/api/v1/auth' });
-    reply.clearCookie('apple_auth_nonce', { path: '/api/v1/auth' });
+    // Clear security cookies (must match the path used when setting)
+    reply.clearCookie('apple_auth_state', { path: '/' });
+    reply.clearCookie('apple_auth_verifier', { path: '/' });
+    reply.clearCookie('apple_auth_nonce', { path: '/' });
 
-    // Validate state (CSRF protection)
-    if (state !== savedState) {
+    // Validate state (CSRF protection) using timing-safe comparison
+    if (!safeCompare(state, savedState)) {
       fastify.auditLogger.logAuthEvent(
         request.raw as unknown as Request,
         null,
@@ -260,7 +279,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
    * POST /api/v1/auth/logout
    * Revoke refresh token and clear cookies
    */
-  fastify.post('/logout', async (request, reply) => {
+  fastify.post('/logout', {
+    config: { rateLimit: authRateLimits.logout }
+  }, async (request, reply) => {
     const refreshToken = request.cookies.rd_refresh_token;
 
     if (refreshToken) {
@@ -284,7 +305,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
    * POST /api/v1/auth/refresh
    * Issue new access token using refresh token
    */
-  fastify.post('/refresh', async (request, reply) => {
+  fastify.post('/refresh', {
+    config: { rateLimit: authRateLimits.refresh }
+  }, async (request, reply) => {
     const refreshToken = request.cookies.rd_refresh_token;
 
     if (!refreshToken) {
@@ -393,7 +416,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
    * List active sessions for current user
    */
   fastify.get('/sessions', {
-    preHandler: [fastify.authenticate]
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: authRateLimits.sessions }
   }, async (request) => {
     const sessions = await fastify.db.query.refreshTokens.findMany({
       where: and(
@@ -420,7 +444,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
    * Revoke a specific session
    */
   fastify.delete<{ Params: { id: string } }>('/sessions/:id', {
-    preHandler: [fastify.authenticate]
+    preHandler: [fastify.authenticate],
+    config: { rateLimit: authRateLimits.sessions }
   }, async (request, reply) => {
     const { id } = request.params;
 

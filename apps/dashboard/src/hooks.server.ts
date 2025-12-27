@@ -4,8 +4,50 @@
  */
 
 import type { Handle } from '@sveltejs/kit';
+import type { Cookies } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { createApiClient, ApiError } from '$lib/api-client';
+
+/**
+ * Cookies we accept from API responses.
+ * Prevents the API from setting arbitrary cookies on the user's browser.
+ */
+const ALLOWED_SET_COOKIES = ['rd_access_token', 'rd_refresh_token'];
+
+/**
+ * Parse and validate Set-Cookie headers from API response.
+ * Only sets cookies that are in the allowlist.
+ */
+function forwardApiCookies(response: Response, cookies: Cookies): void {
+  // getSetCookie() returns all Set-Cookie headers as an array
+  const setCookieHeaders = response.headers.getSetCookie?.() || [];
+
+  for (const setCookieHeader of setCookieHeaders) {
+    // Parse cookie name and value (format: "name=value; attributes...")
+    const [nameValue] = setCookieHeader.split(';');
+    if (!nameValue) continue;
+
+    const equalsIndex = nameValue.indexOf('=');
+    if (equalsIndex === -1) continue;
+
+    const name = nameValue.slice(0, equalsIndex).trim();
+    const value = nameValue.slice(equalsIndex + 1);
+
+    // Only set allowed cookies (security: prevent arbitrary cookie injection)
+    if (!ALLOWED_SET_COOKIES.includes(name)) {
+      console.warn(`Ignoring unexpected cookie from API: ${name}`);
+      continue;
+    }
+
+    // Set the cookie with secure defaults
+    cookies.set(name, value, {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax'
+    });
+  }
+}
 
 // Routes that don't require authentication
 const PUBLIC_ROUTES = [
@@ -43,20 +85,8 @@ export const handle: Handle = async ({ event, resolve }) => {
       try {
         const { response } = await api.refreshToken();
 
-        // Forward the new cookies from the refresh response
-        const setCookieHeader = response.headers.get('set-cookie');
-        if (setCookieHeader) {
-          // Parse and set the new cookies
-          const cookieParts = setCookieHeader.split(';')[0].split('=');
-          if (cookieParts.length >= 2) {
-            cookies.set(cookieParts[0], cookieParts.slice(1).join('='), {
-              path: '/',
-              httpOnly: true,
-              secure: true,
-              sameSite: 'lax'
-            });
-          }
-        }
+        // Forward validated cookies from the refresh response
+        forwardApiCookies(response, cookies);
 
         // Retry getting the user with the new cookies
         const newCookieHeader = cookies.getAll()

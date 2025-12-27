@@ -11,11 +11,12 @@
  */
 
 import { redirect, error } from '@sveltejs/kit';
-import { authenticateWithApple } from '$lib/server/auth/apple.js';
+import { authenticateWithApple, safeCompare } from '$lib/server/auth/apple.js';
 import { createSession, setSessionCookie } from '$lib/server/auth/session.js';
 import { query, execute } from '$lib/server/db/index.js';
 import { logAudit } from '$lib/server/audit.js';
 import { applyRateLimit } from '$lib/server/rate-limiter.js';
+import { logger } from '$lib/server/logger.js';
 import { randomUUID } from 'crypto';
 import type { RequestHandler } from './$types';
 import type { AuditContext } from '$lib/server/audit.js';
@@ -72,8 +73,8 @@ export const POST: RequestHandler = async ({ request, cookies, url, getClientAdd
 	cookies.delete('apple_auth_verifier', { path: '/' });
 	cookies.delete('apple_auth_nonce', { path: '/' });
 
-	// Verify CSRF state
-	if (state !== savedState) {
+	// Verify CSRF state using timing-safe comparison
+	if (!safeCompare(state, savedState)) {
 		await logAuthFailure('invalid_state_parameter', context);
 		throw error(400, 'Invalid state parameter');
 	}
@@ -145,7 +146,7 @@ export const POST: RequestHandler = async ({ request, cookies, url, getClientAdd
 
 		// Log the specific error for debugging (server-side only)
 		const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-		console.error('Apple auth error:', errorMessage);
+		logger.error({ err: errorMessage }, 'Apple auth error');
 
 		// Audit the failure with error category (not sensitive details)
 		let failureReason = 'unknown_error';

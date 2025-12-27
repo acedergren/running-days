@@ -7,6 +7,7 @@
 
 import oracledb from 'oracledb';
 import { env } from '$env/dynamic/private';
+import { logger } from '../logger.js';
 
 // Connection pool configuration
 let pool: oracledb.Pool | null = null;
@@ -38,7 +39,7 @@ export async function initDatabase(): Promise<void> {
 		enableStatistics: true
 	});
 
-	console.log('Oracle connection pool initialized');
+	logger.info('Oracle connection pool initialized');
 }
 
 /**
@@ -123,7 +124,7 @@ export async function transaction<T>(
 		try {
 			await connection.rollback();
 		} catch (rollbackError) {
-			console.error('Rollback failed:', rollbackError);
+			logger.error({ err: rollbackError }, 'Rollback failed');
 		}
 		throw error;
 	} finally {
@@ -138,7 +139,7 @@ export async function closeDatabase(): Promise<void> {
 	if (pool) {
 		await pool.close(10); // 10 second drain time
 		pool = null;
-		console.log('Oracle connection pool closed');
+		logger.info('Oracle connection pool closed');
 	}
 }
 

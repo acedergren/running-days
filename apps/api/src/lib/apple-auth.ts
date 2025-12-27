@@ -8,7 +8,7 @@
  */
 
 import { SignJWT, importPKCS8, jwtVerify, createRemoteJWKSet } from 'jose';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { config } from '../config.js';
 
 const APPLE_AUTH_URL = 'https://appleid.apple.com/auth/authorize';
@@ -16,6 +16,7 @@ const APPLE_TOKEN_URL = 'https://appleid.apple.com/auth/token';
 const APPLE_JWKS_URL = 'https://appleid.apple.com/auth/keys';
 const CLIENT_SECRET_TTL_SECONDS = 600; // 10 minutes
 const ID_TOKEN_MAX_AGE_SECONDS = 600; // Reject tokens older than 10 minutes
+const CLOCK_TOLERANCE_SECONDS = 30; // Allow 30s clock skew between servers
 const FETCH_TIMEOUT_MS = 15000;
 
 export interface AppleUserInfo {
@@ -63,6 +64,16 @@ export function generateNonce(): string {
  */
 export function generateState(): string {
   return randomBytes(16).toString('hex');
+}
+
+/**
+ * Timing-safe string comparison to prevent timing attacks
+ * Used for comparing security tokens like state parameters
+ */
+export function safeCompare(a: string | undefined, b: string | undefined): boolean {
+  if (a === undefined || b === undefined) return false;
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 // ============================================================================
@@ -171,7 +182,8 @@ async function verifyIdentityToken(
 
   const { payload } = await jwtVerify(idToken, JWKS, {
     issuer: 'https://appleid.apple.com',
-    audience: config.appleClientId
+    audience: config.appleClientId,
+    clockTolerance: CLOCK_TOLERANCE_SECONDS // Allow for server clock differences
   });
 
   // Validate required claims

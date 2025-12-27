@@ -9,7 +9,46 @@
  * - IP-based rate limiting for auth endpoints
  * - Configurable limits per endpoint
  * - Automatic cleanup of expired entries
+ * - IP address validation to prevent bypass attacks
  */
+
+import { logger } from './logger.js';
+
+// IPv4 and IPv6 validation patterns
+const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
+const IPV6_REGEX = /^(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}$|^::(?:[a-fA-F0-9]{1,4}:){0,6}[a-fA-F0-9]{1,4}$|^(?:[a-fA-F0-9]{1,4}:){1,7}:$|^(?:[a-fA-F0-9]{1,4}:){1,6}:[a-fA-F0-9]{1,4}$|^(?:[a-fA-F0-9]{1,4}:){1,5}(?::[a-fA-F0-9]{1,4}){1,2}$|^(?:[a-fA-F0-9]{1,4}:){1,4}(?::[a-fA-F0-9]{1,4}){1,3}$|^(?:[a-fA-F0-9]{1,4}:){1,3}(?::[a-fA-F0-9]{1,4}){1,4}$|^(?:[a-fA-F0-9]{1,4}:){1,2}(?::[a-fA-F0-9]{1,4}){1,5}$|^[a-fA-F0-9]{1,4}:(?::[a-fA-F0-9]{1,4}){1,6}$/;
+
+/**
+ * Validate and normalize an IP address
+ * Returns the IP if valid, or a safe fallback for invalid IPs
+ */
+export function validateIpAddress(ip: string | undefined | null): string {
+	if (!ip || typeof ip !== 'string') {
+		return 'unknown';
+	}
+
+	// Trim and limit length to prevent DoS via huge strings
+	const trimmed = ip.trim().slice(0, 45); // Max IPv6 length
+
+	// Check for valid IPv4 or IPv6
+	if (IPV4_REGEX.test(trimmed) || IPV6_REGEX.test(trimmed)) {
+		return trimmed;
+	}
+
+	// Handle IPv4-mapped IPv6 addresses (::ffff:192.168.1.1)
+	if (trimmed.startsWith('::ffff:')) {
+		const ipv4Part = trimmed.slice(7);
+		if (IPV4_REGEX.test(ipv4Part)) {
+			return trimmed;
+		}
+	}
+
+	// Invalid IP - return sanitized version for logging/storage
+	// Only keep alphanumeric, dots, colons (prevents injection)
+	const sanitized = trimmed.replace(/[^a-fA-F0-9.:]/g, '').slice(0, 45);
+	logger.warn({ originalIp: trimmed.slice(0, 50) }, 'Invalid IP address received');
+	return sanitized || 'invalid';
+}
 
 interface RateLimitEntry {
 	count: number;
@@ -24,6 +63,9 @@ interface RateLimitConfig {
 // In-memory store for rate limit entries
 // Key format: `${identifier}:${endpoint}`
 const rateLimitStore = new Map<string, RateLimitEntry>();
+
+// Maximum store size to prevent memory exhaustion attacks
+const MAX_STORE_SIZE = 100000;
 
 // Cleanup interval (every 5 minutes)
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
@@ -51,9 +93,43 @@ export const AUTH_RATE_LIMITS: Record<string, RateLimitConfig> = {
 };
 
 /**
+ * Rate limits for sync API endpoints
+ */
+export const SYNC_RATE_LIMITS: Record<string, RateLimitConfig> = {
+	// Sync endpoint - moderate limit (batch operations)
+	'/api/v1/workouts/sync': {
+		maxRequests: 60,
+		windowMs: 60 * 1000 // 60 requests per minute
+	},
+	// List workouts - generous limit (read-only)
+	'/api/v1/workouts': {
+		maxRequests: 100,
+		windowMs: 60 * 1000 // 100 requests per minute
+	},
+	// Single workout operations - generous limit
+	'/api/v1/workouts/:id': {
+		maxRequests: 100,
+		windowMs: 60 * 1000 // 100 requests per minute
+	},
+	// Sync status - very generous (lightweight)
+	'/api/v1/sync/status': {
+		maxRequests: 120,
+		windowMs: 60 * 1000 // 120 requests per minute
+	}
+};
+
+/**
+ * Combined rate limits for all endpoints
+ */
+export const ALL_RATE_LIMITS: Record<string, RateLimitConfig> = {
+	...AUTH_RATE_LIMITS,
+	...SYNC_RATE_LIMITS
+};
+
+/**
  * Check if a request is rate limited
  *
- * @param identifier - Usually IP address
+ * @param identifier - Usually IP address (will be validated)
  * @param endpoint - The endpoint being accessed
  * @param config - Rate limit configuration (uses defaults if not provided)
  * @returns Object with isLimited flag and remaining requests
@@ -63,14 +139,16 @@ export function checkRateLimit(
 	endpoint: string,
 	config?: RateLimitConfig
 ): { isLimited: boolean; remaining: number; resetIn: number } {
-	const limitConfig = config || AUTH_RATE_LIMITS[endpoint];
+	const limitConfig = config || ALL_RATE_LIMITS[endpoint];
 
 	if (!limitConfig) {
 		// No rate limit configured for this endpoint
 		return { isLimited: false, remaining: Infinity, resetIn: 0 };
 	}
 
-	const key = `${identifier}:${endpoint}`;
+	// Validate IP to prevent bypass attacks with malformed identifiers
+	const validatedId = validateIpAddress(identifier);
+	const key = `${validatedId}:${endpoint}`;
 	const now = Date.now();
 	const entry = rateLimitStore.get(key);
 
@@ -90,6 +168,17 @@ export function checkRateLimit(
 			isLimited: false,
 			remaining: limitConfig.maxRequests - entry.count,
 			resetIn: Math.ceil((entry.resetAt - now) / 1000)
+		};
+	}
+
+	// Check if store is at capacity (prevent memory exhaustion)
+	if (rateLimitStore.size >= MAX_STORE_SIZE) {
+		// Store is full - rate limit this request to protect the server
+		// This is a defense against distributed attacks trying to exhaust memory
+		return {
+			isLimited: true,
+			remaining: 0,
+			resetIn: 60 // Default 1 minute wait
 		};
 	}
 
@@ -156,7 +245,7 @@ function cleanupExpiredEntries(): void {
 	});
 
 	if (cleaned > 0) {
-		console.log(`[Rate Limiter] Cleaned up ${cleaned} expired entries`);
+		logger.debug({ cleaned }, 'Rate limiter cleanup completed');
 	}
 }
 

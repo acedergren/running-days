@@ -10,6 +10,7 @@
 
 import { query, queryOne, execute } from '../db/index.js';
 import { logAudit, type AuditContext } from '../audit.js';
+import { validateIpAddress } from '../rate-limiter.js';
 import { randomBytes } from 'crypto';
 import type { Cookies } from '@sveltejs/kit';
 
@@ -41,7 +42,8 @@ export async function createSession(
 			id: sessionId,
 			userId,
 			expiresAt,
-			ipAddress: context.ipAddress || null,
+			// Validate IP to prevent storing malformed/malicious data
+			ipAddress: context.ipAddress ? validateIpAddress(context.ipAddress) : null,
 			userAgent: context.userAgent?.substring(0, 500) || null
 		}
 	);

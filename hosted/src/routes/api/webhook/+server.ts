@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { validateWebhookToken } from '$lib/server/data-access.js';
 import { createWorkout } from '$lib/server/data-access.js';
 import { logAudit } from '$lib/server/audit.js';
+import { logger } from '$lib/server/logger.js';
 import type { RequestHandler } from './$types';
 
 // Maximum payload size: 1MB (prevents DoS via large payloads)
@@ -76,7 +77,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		const result = HealthAutoExportPayloadSchema.safeParse(rawPayload);
 
 		if (!result.success) {
-			console.warn('Webhook validation failed:', result.error.flatten());
+			logger.warn({ errors: result.error.flatten() }, 'Webhook validation failed');
 			throw error(400, 'Invalid payload format: ' + result.error.issues[0]?.message);
 		}
 
@@ -85,7 +86,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		if (err && typeof err === 'object' && 'status' in err) {
 			throw err; // Re-throw SvelteKit errors
 		}
-		console.error('Webhook JSON parse error:', err);
+		logger.error({ err }, 'Webhook JSON parse error');
 		throw error(400, 'Invalid JSON payload');
 	}
 
@@ -154,7 +155,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		});
 
 	} catch (err) {
-		console.error('Webhook processing error:', err);
+		logger.error({ err }, 'Webhook processing error');
 		throw error(500, 'Failed to process workouts');
 	}
 };
