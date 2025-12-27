@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Activity, AlertCircle, Loader2 } from 'lucide-svelte';
-	import Button from '$lib/components/ui/button.svelte';
+	import { Button } from '@running-days/ui';
 	import { page } from '$app/stores';
 
 	let loading = $state(false);

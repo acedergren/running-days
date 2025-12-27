@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { Activity } from 'lucide-svelte';
-	import Button from '$lib/components/ui/button.svelte';
+	import { Button } from '@running-days/ui';
 
 	let { children } = $props();
 

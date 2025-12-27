@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils.js';
+	import { cn } from '@running-days/utils';
 
 	interface Props {
 		value: number; // 0-100 percentage

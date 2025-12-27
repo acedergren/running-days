@@ -1,7 +1,6 @@
 <script lang="ts">
-	import ProgressRing from '$lib/components/ui/progress-ring.svelte';
-	import StatCard from '$lib/components/ui/stat-card.svelte';
-	import { formatDistance, formatDuration, formatPace } from '$lib/utils';
+	import { ProgressRing, StatCard } from '@running-days/ui';
+	import { formatDistance, formatDuration, formatPace } from '@running-days/utils';
 	import { Calendar, MapPin, Clock, Zap, TrendingUp, ChevronRight, LogOut } from 'lucide-svelte';
 	import type { PageData } from './$types';
 

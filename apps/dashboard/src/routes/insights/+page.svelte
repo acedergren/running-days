@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Chart, Svg, Axis, Bars, Spline, Area, Highlight, Tooltip } from 'layerchart';
 	import { scaleBand, scaleLinear, scaleTime } from 'd3-scale';
-	import { formatDistance, formatPace } from '$lib/utils';
+	import { formatDistance, formatPace } from '@running-days/utils';
 	import {
 		ArrowLeft,
 		TrendingUp,

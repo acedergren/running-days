@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Chart, Svg, Axis, Bars, Spline, Area, Highlight, Tooltip } from 'layerchart';
 	import { scaleBand, scaleLinear, scaleTime } from 'd3-scale';
-	import { formatDistance, formatPace, formatDuration } from '$lib/utils';
+	import { formatDistance, formatPace, formatDuration } from '@running-days/utils';
 	import { ArrowLeft, TrendingUp, Flame, Target, Calendar, MapPin, Clock, Zap, Trophy } from 'lucide-svelte';
 
 	let { data } = $props();

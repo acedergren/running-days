@@ -1,0 +1,46 @@
+{
+  "name": "@running-days/ui",
+  "version": "1.0.0",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./button": {
+      "types": "./src/components/button.svelte",
+      "svelte": "./src/components/button.svelte"
+    },
+    "./card": {
+      "types": "./src/components/card.svelte",
+      "svelte": "./src/components/card.svelte"
+    },
+    "./progress-ring": {
+      "types": "./src/components/progress-ring.svelte",
+      "svelte": "./src/components/progress-ring.svelte"
+    },
+    "./stat-card": {
+      "types": "./src/components/stat-card.svelte",
+      "svelte": "./src/components/stat-card.svelte"
+    }
+  },
+  "scripts": {
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "dependencies": {
+    "@running-days/utils": "workspace:*",
+    "tailwind-variants": "^0.3.0"
+  },
+  "devDependencies": {
+    "svelte": "^5.16.2",
+    "svelte-check": "^4.1.4",
+    "typescript": "^5.7.0"
+  }
+}

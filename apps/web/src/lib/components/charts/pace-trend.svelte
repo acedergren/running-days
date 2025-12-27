@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Chart, Svg, Axis, Spline, Area, Highlight, Tooltip } from 'layerchart';
 	import { scaleTime, scaleLinear } from 'd3-scale';
-	import { formatPace } from '$lib/utils';
+	import { formatPace } from '@running-days/utils';
 
 	type ChartDataPoint = {
 		date: Date;

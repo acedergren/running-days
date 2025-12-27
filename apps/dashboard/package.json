@@ -16,6 +16,8 @@
     "@fontsource/jetbrains-mono": "^5.1.1",
     "@fontsource/space-grotesk": "^5.1.0",
     "@running-days/types": "workspace:*",
+    "@running-days/ui": "workspace:*",
+    "@running-days/utils": "workspace:*",
     "clsx": "^2.1.1",
     "d3-scale": "^4.0.2",
     "layerchart": "^1.0.0",

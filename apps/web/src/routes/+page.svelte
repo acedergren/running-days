@@ -1,6 +1,5 @@
 <script lang="ts">
-	import ProgressRing from '$lib/components/ui/progress-ring.svelte';
-	import Button from '$lib/components/ui/button.svelte';
+	import { ProgressRing, Button } from '@running-days/ui';
 	import {
 		Activity,
 		Calendar,

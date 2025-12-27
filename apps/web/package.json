@@ -44,6 +44,7 @@
     "@running-days/database": "workspace:*",
     "@running-days/observability": "workspace:*",
     "@running-days/types": "workspace:*",
+    "@running-days/ui": "workspace:*",
     "@running-days/utils": "workspace:*",
     "better-sqlite3": "^11.6.0",
     "bits-ui": "^1.0.0",

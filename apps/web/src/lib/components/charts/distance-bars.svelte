@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Chart, Svg, Axis, Bars, Highlight, Tooltip } from 'layerchart';
 	import { scaleBand, scaleLinear } from 'd3-scale';
-	import { formatDistance } from '$lib/utils';
+	import { formatDistance } from '@running-days/utils';
 
 	type ChartDataPoint = {
 		date: string;

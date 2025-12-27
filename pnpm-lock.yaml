@@ -112,6 +112,12 @@ importers:
       '@running-days/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@running-days/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@running-days/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -243,6 +249,9 @@ importers:
       '@running-days/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@running-days/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@running-days/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -391,6 +400,25 @@ importers:
 
   packages/types:
     devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/ui:
+    dependencies:
+      '@running-days/utils':
+        specifier: workspace:*
+        version: link:../utils
+      tailwind-variants:
+        specifier: ^0.3.0
+        version: 0.3.1(tailwindcss@4.1.18)
+    devDependencies:
+      svelte:
+        specifier: ^5.16.2
+        version: 5.46.1
+      svelte-check:
+        specifier: ^4.1.4
+        version: 4.3.5(picomatch@4.0.3)(svelte@5.46.1)(typescript@5.9.3)
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

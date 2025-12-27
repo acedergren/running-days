@@ -1,7 +1,8 @@
 <script lang="ts" module>
-	import { cn, type WithElementRef } from '$lib/utils.js';
+	import { cn } from '@running-days/utils';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
 	import { tv, type VariantProps } from 'tailwind-variants';
+	import type { WithElementRef } from '../types.js';
 
 	export const buttonVariants = tv({
 		base: 'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-ground)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',

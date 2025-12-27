@@ -11,7 +11,7 @@
 		AlertCircle,
 		Loader2
 	} from 'lucide-svelte';
-	import Button from '$lib/components/ui/button.svelte';
+	import { Button } from '@running-days/ui';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
