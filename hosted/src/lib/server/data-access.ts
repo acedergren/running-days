@@ -107,6 +107,107 @@ export async function createWorkout(
 // DAILY STATS
 // ============================================================================
 
+/**
+ * Recalculate daily stats for a specific date after sync
+ * This aggregates all workouts for the given date into the daily_stats table
+ */
+export async function updateDailyStats(
+	userId: string,
+	dateLocal: string,
+	auditContext?: AuditContext
+): Promise<void> {
+	const year = parseInt(dateLocal.slice(0, 4), 10);
+
+	// Aggregate workouts for this date
+	const stats = await queryOne<{
+		RUN_COUNT: number;
+		TOTAL_DISTANCE: number;
+		TOTAL_DURATION: number;
+		AVG_PACE: number | null;
+		LONGEST_RUN: number | null;
+		FASTEST_PACE: number | null;
+	}>(
+		`SELECT
+			COUNT(*) as RUN_COUNT,
+			NVL(SUM(distance_meters), 0) as TOTAL_DISTANCE,
+			NVL(SUM(duration_seconds), 0) as TOTAL_DURATION,
+			AVG(avg_pace_seconds_per_km) as AVG_PACE,
+			MAX(distance_meters) as LONGEST_RUN,
+			MIN(avg_pace_seconds_per_km) as FASTEST_PACE
+		 FROM workouts
+		 WHERE user_id = :userId AND date_local = TO_DATE(:dateLocal, 'YYYY-MM-DD')`,
+		{ userId, dateLocal }
+	);
+
+	if (!stats || stats.RUN_COUNT === 0) {
+		// No workouts for this date - delete the daily stat if it exists
+		await execute(
+			`DELETE FROM daily_stats WHERE user_id = :userId AND date_local = TO_DATE(:dateLocal, 'YYYY-MM-DD')`,
+			{ userId, dateLocal }
+		);
+		return;
+	}
+
+	// Upsert daily stats
+	await execute(
+		`MERGE INTO daily_stats ds
+		 USING (SELECT :userId as user_id, TO_DATE(:dateLocal, 'YYYY-MM-DD') as date_local FROM DUAL) src
+		 ON (ds.user_id = src.user_id AND ds.date_local = src.date_local)
+		 WHEN MATCHED THEN UPDATE SET
+			run_count = :runCount,
+			total_distance_meters = :totalDistance,
+			total_duration_seconds = :totalDuration,
+			avg_pace_seconds_per_km = :avgPace,
+			longest_run_meters = :longestRun,
+			fastest_pace_seconds_per_km = :fastestPace,
+			updated_at = SYSTIMESTAMP
+		 WHEN NOT MATCHED THEN INSERT (
+			id, user_id, date_local, year_num, run_count,
+			total_distance_meters, total_duration_seconds,
+			avg_pace_seconds_per_km, longest_run_meters, fastest_pace_seconds_per_km
+		 ) VALUES (
+			:id, :userId, TO_DATE(:dateLocal, 'YYYY-MM-DD'), :year, :runCount,
+			:totalDistance, :totalDuration, :avgPace, :longestRun, :fastestPace
+		 )`,
+		{
+			id: randomUUID(),
+			userId,
+			dateLocal,
+			year,
+			runCount: stats.RUN_COUNT,
+			totalDistance: stats.TOTAL_DISTANCE,
+			totalDuration: stats.TOTAL_DURATION,
+			avgPace: stats.AVG_PACE,
+			longestRun: stats.LONGEST_RUN,
+			fastestPace: stats.FASTEST_PACE
+		}
+	);
+
+	await logAudit(userId, 'stats_update', 'daily_stats', undefined, {
+		...auditContext,
+		metadata: { dateLocal, runCount: stats.RUN_COUNT }
+	});
+}
+
+/**
+ * Recalculate daily stats for multiple dates (batch operation after sync)
+ */
+export async function updateDailyStatsForDates(
+	userId: string,
+	dates: string[],
+	auditContext?: AuditContext
+): Promise<void> {
+	// Deduplicate dates
+	const uniqueDates = [...new Set(dates)];
+
+	// Process in parallel with concurrency limit
+	const BATCH_SIZE = 10;
+	for (let i = 0; i < uniqueDates.length; i += BATCH_SIZE) {
+		const batch = uniqueDates.slice(i, i + BATCH_SIZE);
+		await Promise.all(batch.map((date) => updateDailyStats(userId, date, auditContext)));
+	}
+}
+
 export async function getDailyStats(
 	userId: string,
 	year: number,

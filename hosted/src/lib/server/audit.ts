@@ -12,6 +12,8 @@
  */
 
 import { execute } from './db/index.js';
+import { logger } from './logger.js';
+import { validateIpAddress } from './rate-limiter.js';
 import { randomUUID } from 'crypto';
 
 export type AuditAction =
@@ -27,7 +29,9 @@ export type AuditAction =
 	| 'consent_revoked'
 	| 'token_created'
 	| 'token_revoked'
-	| 'api_call';
+	| 'api_call'
+	| 'stats_update'
+	| 'goal_update';
 
 export interface AuditContext {
 	ipAddress?: string;
@@ -55,7 +59,8 @@ export async function logAudit(
 				action,
 				resourceType: resourceType || null,
 				resourceId: resourceId || null,
-				ipAddress: context.ipAddress || null,
+				// Validate IP to prevent storing malformed/malicious data
+				ipAddress: context.ipAddress ? validateIpAddress(context.ipAddress) : null,
 				userAgent: context.userAgent?.substring(0, 500) || null,
 				metadata: context.metadata ? JSON.stringify(context.metadata) : null
 			}
@@ -63,13 +68,13 @@ export async function logAudit(
 	} catch (error) {
 		// Audit logging should NEVER fail silently in production
 		// but also should NEVER break the user's action
-		console.error('[AUDIT ERROR]', {
+		logger.error({
 			userId,
 			action,
 			resourceType,
 			resourceId,
-			error: error instanceof Error ? error.message : 'Unknown error'
-		});
+			err: error instanceof Error ? error.message : 'Unknown error'
+		}, 'Audit logging failed');
 	}
 }
 

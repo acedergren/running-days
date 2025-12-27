@@ -1,9 +1,10 @@
 import UIKit
 import HealthKit
 import WidgetKit
+import BackgroundTasks
 
 // MARK: - App Delegate
-// Handles app lifecycle events and HealthKit background delivery
+// Handles app lifecycle events, HealthKit background delivery, and BGTaskScheduler
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     // MARK: - Application Lifecycle
@@ -12,10 +13,66 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // Register background tasks BEFORE app finishes launching
+        registerBackgroundTasks()
+
         // Setup HealthKit background delivery if authorized
         setupHealthKitBackgroundDelivery()
 
+        // Schedule next background sync
+        scheduleBackgroundSync()
+
         return true
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        // Schedule background sync when entering background
+        scheduleBackgroundSync()
+    }
+
+    // MARK: - Background Task Registration
+
+    private func registerBackgroundTasks() {
+        // Register for app refresh task
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: SyncService.backgroundTaskIdentifier,
+            using: nil
+        ) { task in
+            self.handleBackgroundSync(task: task as! BGAppRefreshTask)
+        }
+    }
+
+    private func scheduleBackgroundSync() {
+        Task {
+            await SyncService.shared.scheduleBackgroundSync()
+        }
+    }
+
+    private func handleBackgroundSync(task: BGAppRefreshTask) {
+        // Schedule the next sync first
+        scheduleBackgroundSync()
+
+        // Create sync task
+        let syncTask = Task {
+            await SyncService.shared.performSync(isBackground: true)
+        }
+
+        // Handle expiration
+        task.expirationHandler = {
+            syncTask.cancel()
+        }
+
+        // Complete based on result
+        Task {
+            let result = await syncTask.value
+            task.setTaskCompleted(success: result.isSuccess)
+
+            // Refresh widgets on success
+            if result.isSuccess {
+                await refreshWidgetData()
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
     }
 
     // MARK: - HealthKit Background Delivery
@@ -45,13 +102,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
     }
 
-    /// Handle new workouts from HealthKit
+    /// Handle new workouts from HealthKit observer
     private func handleNewWorkouts(_ workouts: [HKWorkout]) async {
-        do {
-            // Convert and upload workouts
-            let apiWorkouts = HealthKitManager.shared.convertToAPIWorkouts(workouts)
-            try await APIClient.shared.uploadWorkouts(apiWorkouts)
-            HealthKitManager.shared.markSyncComplete()
+        // Use SyncService for all sync operations
+        let result = await SyncService.shared.performSync(isBackground: false)
+
+        switch result {
+        case .success(let created, let updated, _):
+            print("Synced workouts: \(created) created, \(updated) updated")
 
             // Update widget data
             await refreshWidgetData()
@@ -59,9 +117,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             // Reload widget timelines
             WidgetCenter.shared.reloadAllTimelines()
 
-            print("Synced \(workouts.count) new workouts")
-        } catch {
+        case .skipped(let reason):
+            print("Sync skipped: \(reason)")
+
+        case .error(let error):
             print("Failed to sync workouts: \(error)")
+
+            // Queue workouts for retry
+            let apiWorkouts = await HealthKitManager.shared.convertToAPIWorkouts(workouts)
+            await SyncService.shared.queueForSync(workouts: apiWorkouts)
         }
     }
 
