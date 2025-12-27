@@ -19,15 +19,29 @@ const TEST_CONFIG: Partial<Config> = {
   isDev: true,
   rateLimitMax: 1000,
   rateLimitWindow: '1 minute',
-  cookieSecure: false
+  cookieSecure: false,
+  // Apple Sign-In test config
+  appleClientId: 'com.test.runningdays',
+  appleTeamId: 'TESTTEAMID',
+  appleKeyId: 'TESTKEYID',
+  applePrivateKey: `-----BEGIN PRIVATE KEY-----
+MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgCmJ5vONDqIo+6g7e
+gkPH3RRVQlL7J4K2bGy1SZvRE9OgCgYIKoZIzj0DAQehRANCAAQz6kT7Q2jhP8mq
+VJZmJ1TkFBbJHyH7QdwLqtDBcpkz7rJaOvM0ZqVPV0JXmGOk0Kx+L7wNWWlG6dGR
+8tpA8EyN
+-----END PRIVATE KEY-----`,
+  appleRedirectUri: 'http://localhost:5173/auth/apple/callback'
 };
 
 // SQL statements to create the database schema for testing
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
+    email TEXT UNIQUE,
+    password_hash TEXT,
+    apple_user_id TEXT UNIQUE,
+    auth_provider TEXT NOT NULL DEFAULT 'password',
+    email_verified INTEGER NOT NULL DEFAULT 0,
     role TEXT NOT NULL DEFAULT 'user',
     is_active INTEGER NOT NULL DEFAULT 1,
     last_login_at TEXT,
@@ -35,6 +49,7 @@ const SCHEMA_STATEMENTS = [
     updated_at TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS users_email_idx ON users(email)`,
+  `CREATE INDEX IF NOT EXISTS users_apple_user_id_idx ON users(apple_user_id)`,
   `CREATE TABLE IF NOT EXISTS refresh_tokens (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -162,15 +177,26 @@ export async function createTestUser(
   email = 'test@example.com',
   password = 'password123'
 ): Promise<{ id: string; email: string }> {
+  const { users } = await import('@running-days/database');
+
+  // Check if user already exists (for re-use in beforeEach)
+  const existing = await app.db.query.users.findFirst({
+    where: (u, { eq }) => eq(u.email, email)
+  });
+
+  if (existing) {
+    return { id: existing.id, email: existing.email! };
+  }
+
   const passwordHash = await argon2.hash(password);
   const id = crypto.randomUUID();
-
-  const { users } = await import('@running-days/database');
 
   app.db.insert(users).values({
     id,
     email,
     passwordHash,
+    authProvider: 'password',
+    emailVerified: false,
     role: 'user',
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -183,22 +209,47 @@ export async function createTestUser(
 export async function loginTestUser(
   app: FastifyInstance,
   email = 'test@example.com',
-  password = 'password123'
+  _password = 'password123'
 ): Promise<{ accessToken: string; refreshToken: string; cookies: string }> {
-  const response = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/login',
-    payload: { email, password }
+  // Since we've moved to Apple Sign-In, we generate tokens directly for testing
+  const { users, refreshTokens } = await import('@running-days/database');
+  const { hashToken } = await import('../src/plugins/auth.js');
+
+  // Find the user
+  const user = await app.db.query.users.findFirst({
+    where: (u, { eq }) => eq(u.email, email)
   });
 
-  const cookies = response.cookies;
-  const accessToken = cookies.find(c => c.name === 'access_token')?.value ?? '';
-  const refreshToken = cookies.find(c => c.name === 'refresh_token')?.value ?? '';
+  if (!user) {
+    throw new Error(`Test user ${email} not found`);
+  }
+
+  // Generate tokens directly
+  const accessToken = await app.jwt.sign({
+    sub: user.id,
+    email: user.email ?? '',
+    role: user.role as 'user' | 'admin'
+  });
+
+  const refreshToken = await app.jwt.generateRefreshToken();
+  const tokenHash = await hashToken(refreshToken);
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  // Store refresh token
+  app.db.insert(refreshTokens).values({
+    id: crypto.randomUUID(),
+    userId: user.id,
+    tokenHash,
+    expiresAt: expiresAt.toISOString(),
+    createdAt: new Date().toISOString()
+  }).run();
 
   return {
     accessToken,
     refreshToken,
-    cookies: `access_token=${accessToken}; refresh_token=${refreshToken}`
+    cookies: `rd_access_token=${accessToken}; rd_refresh_token=${refreshToken}`
   };
 }
 
@@ -208,6 +259,16 @@ export async function createTestGoal(
   targetDays = 300
 ): Promise<{ id: number; year: number; targetDays: number }> {
   const { goals } = await import('@running-days/database');
+  const { eq } = await import('drizzle-orm');
+
+  // Check if goal already exists (for re-use in beforeEach)
+  const existing = await app.db.query.goals.findFirst({
+    where: eq(goals.year, year)
+  });
+
+  if (existing) {
+    return { id: existing.id, year: existing.year, targetDays: existing.targetDays };
+  }
 
   const result = app.db.insert(goals).values({
     year,

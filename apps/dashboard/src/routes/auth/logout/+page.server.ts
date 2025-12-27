@@ -9,9 +9,9 @@ export const actions: Actions = {
 			// Ignore logout errors
 		}
 
-		// Clear all auth cookies
-		cookies.delete('access_token', { path: '/' });
-		cookies.delete('refresh_token', { path: '/' });
+		// Clear all auth cookies (must match API cookie names)
+		cookies.delete('rd_access_token', { path: '/' });
+		cookies.delete('rd_refresh_token', { path: '/' });
 
 		throw redirect(303, '/auth/login');
 	}

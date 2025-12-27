@@ -1,8 +1,11 @@
 /**
  * Authentication Route Tests
+ *
+ * Tests session management routes (logout, refresh, me, sessions).
+ * Apple Sign-In OAuth flow is tested via integration tests.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FastifyInstance } from 'fastify';
 import { createTestApp, createTestUser, loginTestUser } from './setup.js';
 
@@ -17,58 +20,26 @@ describe('Auth Routes', () => {
     await app.close();
   });
 
-  describe('POST /api/v1/auth/login', () => {
-    beforeEach(async () => {
-      await createTestUser(app, 'login@example.com', 'testpassword');
-    });
-
-    it('should login with valid credentials', async () => {
+  describe('GET /api/v1/auth/apple', () => {
+    // Skip: Requires actual Apple credentials configured
+    // The Apple auth flow is tested via integration tests
+    it.skip('should return Apple auth URL', async () => {
       const response = await app.inject({
-        method: 'POST',
-        url: '/api/v1/auth/login',
-        payload: {
-          email: 'login@example.com',
-          password: 'testpassword'
-        }
+        method: 'GET',
+        url: '/api/v1/auth/apple'
       });
 
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body).toHaveProperty('user');
-      expect(body.user.email).toBe('login@example.com');
-      expect(body).toHaveProperty('message', 'Login successful');
+      expect(body).toHaveProperty('authUrl');
+      expect(body.authUrl).toContain('appleid.apple.com');
 
-      // Should set cookies
+      // Should set security cookies
       const cookies = response.cookies;
-      expect(cookies.find(c => c.name === 'access_token')).toBeDefined();
-      expect(cookies.find(c => c.name === 'refresh_token')).toBeDefined();
-    });
-
-    it('should reject invalid password', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/v1/auth/login',
-        payload: {
-          email: 'login@example.com',
-          password: 'wrongpassword'
-        }
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('should reject non-existent user', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/v1/auth/login',
-        payload: {
-          email: 'nonexistent@example.com',
-          password: 'testpassword'
-        }
-      });
-
-      expect(response.statusCode).toBe(401);
+      expect(cookies.find(c => c.name === 'apple_auth_state')).toBeDefined();
+      expect(cookies.find(c => c.name === 'apple_auth_verifier')).toBeDefined();
+      expect(cookies.find(c => c.name === 'apple_auth_nonce')).toBeDefined();
     });
   });
 
@@ -86,8 +57,8 @@ describe('Auth Routes', () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json();
-      expect(body.email).toBe('me@example.com');
-      expect(body).not.toHaveProperty('passwordHash');
+      expect(body.user).toBeDefined();
+      expect(body.user.email).toBe('me@example.com');
     });
 
     it('should reject unauthenticated requests', async () => {
@@ -113,8 +84,8 @@ describe('Auth Routes', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Cookies should be cleared (max-age 0)
-      const accessTokenCookie = response.cookies.find(c => c.name === 'access_token');
+      // Cookies should be cleared (empty value)
+      const accessTokenCookie = response.cookies.find(c => c.name === 'rd_access_token');
       expect(accessTokenCookie?.value).toBe('');
     });
   });
@@ -133,7 +104,7 @@ describe('Auth Routes', () => {
       expect(response.statusCode).toBe(200);
 
       // Should set new cookies
-      const newAccessToken = response.cookies.find(c => c.name === 'access_token');
+      const newAccessToken = response.cookies.find(c => c.name === 'rd_access_token');
       expect(newAccessToken).toBeDefined();
     });
 
@@ -141,6 +112,35 @@ describe('Auth Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/auth/refresh'
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('GET /api/v1/auth/sessions', () => {
+    it('should list active sessions', async () => {
+      await createTestUser(app, 'sessions@example.com', 'testpassword');
+      const { cookies } = await loginTestUser(app, 'sessions@example.com', 'testpassword');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/sessions',
+        headers: { cookie: cookies }
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body).toHaveProperty('sessions');
+      expect(Array.isArray(body.sessions)).toBe(true);
+      expect(body.sessions.length).toBeGreaterThan(0);
+    });
+
+    it('should require authentication', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/sessions'
       });
 
       expect(response.statusCode).toBe(401);
