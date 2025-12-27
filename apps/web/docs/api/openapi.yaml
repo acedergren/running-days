@@ -1,0 +1,461 @@
+openapi: 3.0.3
+info:
+  title: Running Days API
+  version: 1.0.0
+  description: |
+    API for the Running Days fitness tracking application.
+
+    Running Days tracks unique running days toward a yearly goal, integrating with
+    Apple Health via the Health Auto Export iOS app.
+
+    ## Authentication
+
+    The webhook endpoint requires a token for authentication. Tokens can be passed via:
+    - Query parameter: `?token=your-token`
+    - Header: `X-Webhook-Token: your-token`
+
+    ## Rate Limits
+
+    Currently no rate limits are enforced. The SQLite database handles concurrent
+    writes via WAL mode.
+
+  contact:
+    name: Running Days
+    url: https://github.com/acedergren/running-days
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://app.running-days.com
+    description: Production server
+  - url: http://localhost:5173
+    description: Local development
+
+tags:
+  - name: Webhook
+    description: Health Auto Export integration endpoints
+  - name: Metrics
+    description: Observability and monitoring endpoints
+
+paths:
+  /api/webhook:
+    get:
+      operationId: testWebhook
+      summary: Test webhook connectivity
+      description: |
+        Verify the webhook endpoint is active and optionally validate a token.
+        Use this to test your Health Auto Export configuration.
+      tags:
+        - Webhook
+      parameters:
+        - name: token
+          in: query
+          required: false
+          description: Optional token to validate
+          schema:
+            type: string
+            example: my-secret-token
+      responses:
+        '200':
+          description: Webhook is active
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/WebhookStatusSimple'
+                  - $ref: '#/components/schemas/WebhookStatusWithToken'
+              examples:
+                without_token:
+                  summary: No token provided
+                  value:
+                    status: ok
+                    message: "Webhook endpoint active. Token required for POST."
+                with_valid_token:
+                  summary: Valid token provided
+                  value:
+                    status: ok
+                    message: "Token valid"
+                    tokenName: "iPhone 15 Pro"
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Invalid token"
+
+    post:
+      operationId: receiveWorkouts
+      summary: Receive workout data from Health Auto Export
+      description: |
+        Primary webhook endpoint for receiving workout data from the Health Auto Export
+        iOS app. Only running workouts (name contains "running" or "run") are processed.
+
+        **Deduplication**: Workouts with duplicate IDs are skipped.
+
+        **Daily Aggregation**: Multiple runs on the same day are aggregated into
+        daily statistics.
+      tags:
+        - Webhook
+      security:
+        - tokenQuery: []
+        - tokenHeader: []
+      parameters:
+        - name: token
+          in: query
+          required: false
+          description: Webhook authentication token (alternative to header)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthExportPayload'
+            examples:
+              single_workout:
+                summary: Single running workout
+                value:
+                  data:
+                    workouts:
+                      - id: "abc123-uuid"
+                        name: "Outdoor Running"
+                        start: "2025-01-15T08:00:00Z"
+                        end: "2025-01-15T08:35:00Z"
+                        duration: 2100
+                        distance: 7500
+                        activeEnergy: 420
+                        avgHeartRate: 152
+                        maxHeartRate: 175
+              multiple_workouts:
+                summary: Multiple workouts (mixed types)
+                value:
+                  data:
+                    workouts:
+                      - id: "run-001"
+                        name: "Morning Run"
+                        start: "2025-01-15T06:00:00Z"
+                        end: "2025-01-15T06:30:00Z"
+                        duration: 1800
+                        distance: 5000
+                      - id: "cycle-001"
+                        name: "Cycling"
+                        start: "2025-01-15T17:00:00Z"
+                        end: "2025-01-15T18:00:00Z"
+                        duration: 3600
+                        distance: 25000
+                      - id: "run-002"
+                        name: "Evening Run"
+                        start: "2025-01-15T19:00:00Z"
+                        end: "2025-01-15T19:25:00Z"
+                        duration: 1500
+                        distance: 4000
+      responses:
+        '200':
+          description: Workouts processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+              examples:
+                success:
+                  summary: Workouts processed
+                  value:
+                    success: true
+                    message: "Processed 2 running workouts"
+                    processed: 2
+                    skipped: 0
+                no_running:
+                  summary: No running workouts in payload
+                  value:
+                    success: true
+                    message: "No running workouts in payload"
+                    processed: 0
+                duplicates:
+                  summary: Some duplicates skipped
+                  value:
+                    success: true
+                    message: "Processed 1 running workouts"
+                    processed: 1
+                    skipped: 2
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Invalid JSON payload"
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missing_token:
+                  summary: No token provided
+                  value:
+                    message: "Missing webhook token"
+                invalid_token:
+                  summary: Token invalid or inactive
+                  value:
+                    message: "Invalid or inactive webhook token"
+
+  /api/metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics endpoint
+      description: |
+        Exposes application metrics in Prometheus text format for observability.
+
+        Includes:
+        - HTTP request counts and latencies
+        - Database query metrics
+        - Workout processing statistics
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP running_days_workouts_total Total workouts imported
+                # TYPE running_days_workouts_total counter
+                running_days_workouts_total 247
+
+                # HELP running_days_http_requests_total HTTP requests
+                # TYPE running_days_http_requests_total counter
+                running_days_http_requests_total{method="POST",path="/api/webhook",status="200"} 150
+
+components:
+  securitySchemes:
+    tokenQuery:
+      type: apiKey
+      in: query
+      name: token
+      description: Webhook token passed as query parameter
+    tokenHeader:
+      type: apiKey
+      in: header
+      name: X-Webhook-Token
+      description: Webhook token passed as header
+
+  schemas:
+    HealthExportPayload:
+      type: object
+      description: Payload format from Health Auto Export iOS app
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          properties:
+            workouts:
+              type: array
+              items:
+                $ref: '#/components/schemas/HealthExportWorkout'
+
+    HealthExportWorkout:
+      type: object
+      description: Individual workout from Health Auto Export
+      required:
+        - name
+        - start
+        - end
+        - duration
+      properties:
+        id:
+          type: string
+          description: UUID from Health Auto Export (optional, will be generated if missing)
+          example: "abc123-uuid"
+        name:
+          type: string
+          description: Workout type name (only "Running" or "Run" types are processed)
+          example: "Outdoor Running"
+        start:
+          type: string
+          format: date-time
+          description: Workout start time (ISO 8601)
+          example: "2025-01-15T08:00:00Z"
+        end:
+          type: string
+          format: date-time
+          description: Workout end time (ISO 8601)
+          example: "2025-01-15T08:35:00Z"
+        duration:
+          type: number
+          description: Duration in seconds
+          example: 2100
+        distance:
+          type: number
+          description: Distance in meters
+          example: 7500
+        activeEnergy:
+          type: number
+          description: Active calories burned
+          example: 420
+        avgHeartRate:
+          type: integer
+          description: Average heart rate (BPM)
+          example: 152
+        maxHeartRate:
+          type: integer
+          description: Maximum heart rate (BPM)
+          example: 175
+
+    WebhookResponse:
+      type: object
+      description: Response from webhook endpoint
+      required:
+        - success
+        - message
+        - processed
+      properties:
+        success:
+          type: boolean
+          description: Whether the request was processed successfully
+          example: true
+        message:
+          type: string
+          description: Human-readable result message
+          example: "Processed 2 running workouts"
+        processed:
+          type: integer
+          description: Number of workouts newly imported
+          example: 2
+        skipped:
+          type: integer
+          description: Number of workouts skipped (duplicates or invalid)
+          example: 0
+
+    WebhookStatusSimple:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        message:
+          type: string
+          example: "Webhook endpoint active. Token required for POST."
+
+    WebhookStatusWithToken:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        message:
+          type: string
+          example: "Token valid"
+        tokenName:
+          type: string
+          description: Human-readable name of the validated token
+          example: "iPhone 15 Pro"
+
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Error description
+          example: "Invalid webhook token"
+
+    Workout:
+      type: object
+      description: Stored workout record
+      properties:
+        id:
+          type: string
+          description: Unique workout identifier
+        date:
+          type: string
+          format: date
+          description: Date in YYYY-MM-DD format
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        durationSeconds:
+          type: integer
+        distanceMeters:
+          type: number
+        energyBurnedKcal:
+          type: number
+          nullable: true
+        avgHeartRate:
+          type: integer
+          nullable: true
+        maxHeartRate:
+          type: integer
+          nullable: true
+        avgPaceSecondsPerKm:
+          type: number
+          nullable: true
+        source:
+          type: string
+          default: "health_auto_export"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DailyStats:
+      type: object
+      description: Aggregated statistics for a single day
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date in YYYY-MM-DD format (primary key)
+        year:
+          type: integer
+          description: Year for easy filtering
+        runCount:
+          type: integer
+          description: Number of runs that day
+        totalDistanceMeters:
+          type: number
+        totalDurationSeconds:
+          type: integer
+        avgPaceSecondsPerKm:
+          type: number
+          nullable: true
+        longestRunMeters:
+          type: number
+          nullable: true
+        fastestPaceSecondsPerKm:
+          type: number
+          nullable: true
+
+    Goal:
+      type: object
+      description: Yearly goal configuration
+      properties:
+        id:
+          type: integer
+        year:
+          type: integer
+          description: Year (unique)
+        targetDays:
+          type: integer
+          description: Target number of running days
+          default: 300
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
